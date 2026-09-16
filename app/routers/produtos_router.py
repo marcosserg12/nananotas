@@ -35,6 +35,7 @@ def criar(
     preco_venda: str = Form(...),
     codigo_fabricante: str = Form(""),
     preco_custo: str = Form("0"),
+    estoque_atual: str = Form("0"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
@@ -48,6 +49,7 @@ def criar(
         preco_venda=Decimal(preco_venda),
         codigo_fabricante=codigo_fabricante or None,
         preco_custo=Decimal(preco_custo or "0"),
+        estoque_atual=Decimal(estoque_atual or "0"),
     )
     return RedirectResponse(url="/produtos", status_code=303)
 
