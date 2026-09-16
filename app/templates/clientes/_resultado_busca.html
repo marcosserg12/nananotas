@@ -1,0 +1,8 @@
+<ul class="border rounded bg-white divide-y">
+    {% for cliente in clientes %}
+    <li class="p-2 hover:bg-slate-50 cursor-pointer"
+        onclick="document.getElementById('cliente_id').value='{{ cliente.id }}'; document.getElementById('cliente_busca').value='{{ cliente.nome }}'; document.getElementById('resultado_busca_cliente').innerHTML='';">
+        {{ cliente.nome }} {% if cliente.cpf_cnpj %}— {{ cliente.cpf_cnpj }}{% endif %}
+    </li>
+    {% endfor %}
+</ul>

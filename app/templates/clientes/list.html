@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Clientes - Nana Lanches{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Clientes</h1>
+    <a href="/clientes/novo" class="bg-slate-800 text-white px-4 py-2 rounded">+ Novo cliente</a>
+</div>
+<table class="w-full bg-white rounded shadow overflow-hidden">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Nome</th>
+            <th class="p-2">Tipo</th>
+            <th class="p-2">CPF/CNPJ</th>
+            <th class="p-2">Telefone</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cliente in clientes %}
+        <tr class="border-t">
+            <td class="p-2">{{ cliente.nome }}</td>
+            <td class="p-2">{{ cliente.tipo_pessoa.value }}</td>
+            <td class="p-2">{{ cliente.cpf_cnpj or "-" }}</td>
+            <td class="p-2">{{ cliente.telefone or "-" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Novo cliente - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Novo cliente</h1>
+<form method="post" action="/clientes/novo" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
+    <div>
+        <label class="block text-sm font-medium">Tipo</label>
+        <select name="tipo_pessoa" class="w-full border rounded px-3 py-2">
+            <option value="PF">Pessoa Física</option>
+            <option value="PJ">Pessoa Jurídica</option>
+        </select>
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Nome / Razão Social</label>
+        <input type="text" name="nome" required class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">CPF/CNPJ</label>
+        <input type="text" name="cpf_cnpj" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Inscrição Estadual</label>
+        <input type="text" name="ie" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Endereço</label>
+        <input type="text" name="endereco" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Telefone</label>
+        <input type="text" name="telefone" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">E-mail</label>
+        <input type="email" name="email" class="w-full border rounded px-3 py-2">
+    </div>
+    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Salvar</button>
+</form>
+{% endblock %}
