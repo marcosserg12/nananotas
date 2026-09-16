@@ -35,3 +35,15 @@ def client(db_session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+from app.auth import hash_senha
+from app.models.usuario import Usuario
+
+
+@pytest.fixture()
+def authed_client(client, db_session):
+    db_session.add(Usuario(username="admin", senha_hash=hash_senha("senha123"), ativo=True))
+    db_session.commit()
+    client.post("/login", data={"username": "admin", "senha": "senha123"})
+    return client
