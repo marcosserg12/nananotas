@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import hash_senha
 from app.models.usuario import Usuario
+from app.services.clientes_service import garantir_consumidor_final
 
 
 def criar_usuario_admin(db: Session, username: str, senha: str) -> Usuario:
@@ -15,6 +16,11 @@ def criar_usuario_admin(db: Session, username: str, senha: str) -> Usuario:
     return usuario
 
 
+def seed_inicial(db: Session, admin_username: str, admin_senha: str) -> None:
+    criar_usuario_admin(db, admin_username, admin_senha)
+    garantir_consumidor_final(db)
+
+
 if __name__ == "__main__":
     from app.database import SessionLocal
 
@@ -22,7 +28,7 @@ if __name__ == "__main__":
     try:
         username = input("Usuário admin: ")
         senha = input("Senha: ")
-        criar_usuario_admin(db, username, senha)
-        print("Usuário criado com sucesso.")
+        seed_inicial(db, username, senha)
+        print("Dados iniciais criados com sucesso.")
     finally:
         db.close()
