@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     focus_nfe_token: str = ""
     focus_nfe_ambiente: str = "homologacao"
+    sefaz_certificado_path: str = ""
+    sefaz_certificado_senha: str = ""
+    sefaz_ambiente: str = "homologacao"
+    sefaz_csc_id: str = ""
+    sefaz_csc_token: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
