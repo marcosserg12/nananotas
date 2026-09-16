@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.nota_fiscal import NotaFiscal, StatusNota
-from app.models.venda import Venda
+from app.models.venda import StatusVenda, Venda
 from app.services.fiscal.base import FiscalProvider
 
 
@@ -9,6 +9,8 @@ def emitir_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFis
     venda = db.get(Venda, venda_id)
     if venda is None:
         raise ValueError("Venda não encontrada")
+    if venda.status != StatusVenda.PAGO:
+        raise ValueError("Venda ainda não foi paga — não é possível emitir nota fiscal")
 
     resultado = provider.emitir(venda)
 
@@ -39,6 +41,8 @@ def cancelar_nota(db: Session, venda_id: int, motivo: str, provider: FiscalProvi
     nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
     if nota is None:
         raise ValueError("Nota fiscal não encontrada para esta venda")
+    if nota.status != StatusNota.AUTORIZADA:
+        raise ValueError("Apenas notas autorizadas podem ser canceladas")
 
     resultado = provider.cancelar(nota.referencia, motivo)
     _aplicar_resultado(nota, resultado)

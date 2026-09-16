@@ -5,9 +5,13 @@
 
 {% if nota is none %}
 <p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
+{% if venda.status.value == "pago" %}
 <form method="post" action="/vendas/{{ venda.id }}/nota/emitir">
     <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
 </form>
+{% else %}
+<p class="text-amber-700">Finalize o pagamento antes de emitir a nota fiscal.</p>
+{% endif %}
 {% else %}
 <p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
 {% if nota.mensagem_erro %}
