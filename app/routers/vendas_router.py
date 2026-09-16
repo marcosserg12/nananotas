@@ -77,6 +77,13 @@ def confirmar_pagamento(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas)
-    parcelas_service.confirmar_venda(db, venda_id, Decimal(valor_pago))
+    try:
+        valor_pago_decimal = Decimal(valor_pago)
+    except InvalidOperation:
+        raise HTTPException(status_code=400, detail="Valor pago inválido")
+    try:
+        parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas)
+        parcelas_service.confirmar_venda(db, venda_id, valor_pago_decimal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
