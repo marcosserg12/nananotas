@@ -7,6 +7,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.dependencies import get_fiscal_provider
 from app.models.nota_fiscal import NotaFiscal
+from app.models.parcela import Parcela
 from app.models.usuario import Usuario
 from app.models.venda import Venda
 from app.services import notas_service
@@ -20,7 +21,10 @@ templates = Jinja2Templates(directory="app/templates")
 def ver_nota(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     venda = db.get(Venda, venda_id)
     nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
-    return templates.TemplateResponse("vendas/nota.html", {"request": request, "venda": venda, "nota": nota})
+    parcelas = db.query(Parcela).filter(Parcela.venda_id == venda_id).order_by(Parcela.numero).all()
+    return templates.TemplateResponse(
+        "vendas/nota.html", {"request": request, "venda": venda, "nota": nota, "parcelas": parcelas}
+    )
 
 
 @router.post("/{venda_id}/nota/emitir")

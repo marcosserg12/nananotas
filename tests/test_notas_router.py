@@ -162,6 +162,26 @@ def test_cancelar_nota_ja_cancelada_retorna_400(authed_client_com_provider_falso
     assert provider_falso.canceladas == [(f"venda-{venda_paga.id}", "Erro de digitação")]
 
 
+def test_pagina_da_nota_mostra_as_parcelas_geradas(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert response.status_code == 200
+    assert "dinheiro" in response.text
+    assert "10.00" in response.text
+    assert "Em aberto" in response.text
+
+
+def test_pagina_da_nota_sem_parcelas_nao_mostra_a_tabela(authed_client_com_provider_falso, venda_nao_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_nao_paga.id}/nota")
+
+    assert response.status_code == 200
+    assert "Vencimento" not in response.text
+
+
 def test_emitir_nota_duas_vezes_atualiza_registro_existente_em_vez_de_duplicar(
     authed_client_com_provider_falso, venda_paga, db_session
 ):

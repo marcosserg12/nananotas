@@ -3,6 +3,30 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Nota fiscal — Orçamento nº {{ venda.numero_orcamento }}</h1>
 
+{% if parcelas %}
+<h2 class="font-semibold mb-2">Parcelas — {{ venda.forma_pagamento or "-" }}</h2>
+<table class="w-full bg-white rounded shadow overflow-hidden mb-4">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Nº</th>
+            <th class="p-2">Valor</th>
+            <th class="p-2">Vencimento</th>
+            <th class="p-2">Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for parcela in parcelas %}
+        <tr class="border-t">
+            <td class="p-2">{{ parcela.numero }}</td>
+            <td class="p-2">R$ {{ "%.2f"|format(parcela.valor) }}</td>
+            <td class="p-2">{{ parcela.vencimento.strftime("%d/%m/%Y") }}</td>
+            <td class="p-2">{{ "Pago" if parcela.status.value == "pago" else "Em aberto" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
 {% if nota is none %}
 <p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
 {% if venda.status.value == "pago" %}
