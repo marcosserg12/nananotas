@@ -12,6 +12,7 @@
             <th class="p-2">Tipo</th>
             <th class="p-2">CPF/CNPJ</th>
             <th class="p-2">Telefone</th>
+            <th class="p-2"></th>
         </tr>
     </thead>
     <tbody>
@@ -21,6 +22,11 @@
             <td class="p-2">{{ cliente.tipo_pessoa.value }}</td>
             <td class="p-2">{{ cliente.cpf_cnpj or "-" }}</td>
             <td class="p-2">{{ cliente.telefone or "-" }}</td>
+            <td class="p-2">
+                {% if not cliente.consumidor_final %}
+                <a href="/clientes/{{ cliente.id }}/editar" class="text-slate-600 underline">Editar</a>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

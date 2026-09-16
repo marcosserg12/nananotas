@@ -26,7 +26,8 @@
             <td class="p-2">{{ produto.estoque_atual }}</td>
             <td class="p-2">R$ {{ "%.2f"|format(produto.preco_venda) }}</td>
             <td class="p-2">{{ "Sim" if produto.ativo else "Não" }}</td>
-            <td class="p-2">
+            <td class="p-2 flex gap-3 items-center">
+                <a href="/produtos/{{ produto.id }}/editar" class="text-slate-600 underline">Editar</a>
                 <form method="post" action="/produtos/{{ produto.id }}/alternar-ativo">
                     <button type="submit" class="text-slate-600 underline">
                         {{ "Desativar" if produto.ativo else "Ativar" }}

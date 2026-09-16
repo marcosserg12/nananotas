@@ -1,39 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Novo cliente - Nana Lanches{% endblock %}
+{% block title %}{{ "Editar cliente" if cliente else "Novo cliente" }} - Nana Lanches{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-4">Novo cliente</h1>
-<form method="post" action="/clientes/novo" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
+<h1 class="text-2xl font-bold mb-4">{{ "Editar cliente" if cliente else "Novo cliente" }}</h1>
+<form method="post" action="{{ '/clientes/%d/editar'|format(cliente.id) if cliente else '/clientes/novo' }}" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
     <div>
         <label class="block text-sm font-medium">Tipo</label>
         <select name="tipo_pessoa" class="w-full border rounded px-3 py-2">
-            <option value="PF">Pessoa Física</option>
-            <option value="PJ">Pessoa Jurídica</option>
+            <option value="PF" {{ "selected" if cliente and cliente.tipo_pessoa.value == "PF" else "" }}>Pessoa Física</option>
+            <option value="PJ" {{ "selected" if cliente and cliente.tipo_pessoa.value == "PJ" else "" }}>Pessoa Jurídica</option>
         </select>
     </div>
     <div>
         <label class="block text-sm font-medium">Nome / Razão Social</label>
-        <input type="text" name="nome" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="nome" value="{{ cliente.nome if cliente else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">CPF/CNPJ</label>
-        <input type="text" name="cpf_cnpj" class="w-full border rounded px-3 py-2">
+        <input type="text" name="cpf_cnpj" value="{{ cliente.cpf_cnpj or '' if cliente else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Inscrição Estadual</label>
-        <input type="text" name="ie" class="w-full border rounded px-3 py-2">
+        <input type="text" name="ie" value="{{ cliente.ie or '' if cliente else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Endereço</label>
-        <input type="text" name="endereco" class="w-full border rounded px-3 py-2">
+        <input type="text" name="endereco" value="{{ cliente.endereco or '' if cliente else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Telefone</label>
-        <input type="text" name="telefone" class="w-full border rounded px-3 py-2">
+        <input type="text" name="telefone" value="{{ cliente.telefone or '' if cliente else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">E-mail</label>
-        <input type="email" name="email" class="w-full border rounded px-3 py-2">
+        <input type="email" name="email" value="{{ cliente.email or '' if cliente else '' }}" class="w-full border rounded px-3 py-2">
     </div>
-    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Salvar</button>
+    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">{{ "Salvar alterações" if cliente else "Salvar" }}</button>
 </form>
 {% endblock %}

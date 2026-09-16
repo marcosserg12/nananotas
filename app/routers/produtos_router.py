@@ -1,12 +1,13 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.models.produto import Produto
 from app.models.usuario import Usuario
 from app.services import produtos_service
 
@@ -22,7 +23,7 @@ def listar(request: Request, db: Session = Depends(get_db), usuario: Usuario = D
 
 @router.get("/novo", response_class=HTMLResponse)
 def novo_form(request: Request, usuario: Usuario = Depends(get_current_user)):
-    return templates.TemplateResponse("produtos/form.html", {"request": request})
+    return templates.TemplateResponse("produtos/form.html", {"request": request, "produto": None})
 
 
 @router.post("/novo")
@@ -51,6 +52,54 @@ def criar(
         preco_custo=Decimal(preco_custo or "0"),
         estoque_atual=Decimal(estoque_atual or "0"),
     )
+    return RedirectResponse(url="/produtos", status_code=303)
+
+
+@router.get("/{produto_id}/editar", response_class=HTMLResponse)
+def editar_form(
+    produto_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    produto = db.get(Produto, produto_id)
+    if produto is None:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return templates.TemplateResponse("produtos/form.html", {"request": request, "produto": produto})
+
+
+@router.post("/{produto_id}/editar")
+def editar(
+    produto_id: int,
+    codigo_interno: str = Form(...),
+    nome: str = Form(...),
+    categoria_nome: str = Form(...),
+    ncm: str = Form(...),
+    unidade: str = Form("UN"),
+    preco_venda: str = Form(...),
+    codigo_fabricante: str = Form(""),
+    preco_custo: str = Form("0"),
+    estoque_atual: str = Form("0"),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    categoria = produtos_service.obter_ou_criar_categoria(db, categoria_nome)
+    try:
+        produtos_service.atualizar_produto(
+            db,
+            produto_id,
+            codigo_interno=codigo_interno,
+            nome=nome,
+            categoria_id=categoria.id,
+            ncm=ncm,
+            unidade=unidade,
+            preco_venda=Decimal(preco_venda),
+            codigo_fabricante=codigo_fabricante or None,
+            preco_custo=Decimal(preco_custo or "0"),
+            estoque_atual=Decimal(estoque_atual or "0"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     return RedirectResponse(url="/produtos", status_code=303)
 
 

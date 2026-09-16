@@ -1,44 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Novo produto - Nana Lanches{% endblock %}
+{% block title %}{{ "Editar produto" if produto else "Novo produto" }} - Nana Lanches{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-4">Novo produto</h1>
-<form method="post" action="/produtos/novo" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
+<h1 class="text-2xl font-bold mb-4">{{ "Editar produto" if produto else "Novo produto" }}</h1>
+<form method="post" action="{{ '/produtos/%d/editar'|format(produto.id) if produto else '/produtos/novo' }}" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
     <div>
         <label class="block text-sm font-medium">Código interno</label>
-        <input type="text" name="codigo_interno" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="codigo_interno" value="{{ produto.codigo_interno if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Nome</label>
-        <input type="text" name="nome" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="nome" value="{{ produto.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Categoria</label>
-        <input type="text" name="categoria_nome" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="categoria_nome" value="{{ produto.categoria.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Código do fabricante</label>
-        <input type="text" name="codigo_fabricante" class="w-full border rounded px-3 py-2">
+        <input type="text" name="codigo_fabricante" value="{{ produto.codigo_fabricante or '' if produto else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">NCM</label>
-        <input type="text" name="ncm" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="ncm" value="{{ produto.ncm if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Unidade</label>
-        <input type="text" name="unidade" value="UN" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="unidade" value="{{ produto.unidade if produto else 'UN' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Preço de custo</label>
-        <input type="text" name="preco_custo" value="0" class="w-full border rounded px-3 py-2">
+        <input type="text" name="preco_custo" value="{{ produto.preco_custo if produto else '0' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Preço de venda</label>
-        <input type="text" name="preco_venda" required class="w-full border rounded px-3 py-2">
+        <input type="text" name="preco_venda" value="{{ produto.preco_venda if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
         <label class="block text-sm font-medium">Estoque atual</label>
-        <input type="text" name="estoque_atual" value="0" class="w-full border rounded px-3 py-2">
+        <input type="text" name="estoque_atual" value="{{ produto.estoque_atual if produto else '0' }}" class="w-full border rounded px-3 py-2">
     </div>
-    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Salvar</button>
+    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">{{ "Salvar alterações" if produto else "Salvar" }}</button>
 </form>
 {% endblock %}
