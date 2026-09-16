@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     sefaz_ambiente: str = "homologacao"
     sefaz_csc_id: str = ""
     sefaz_csc_token: str = ""
+    emitente_cnpj: str = ""
+    emitente_razao_social: str = ""
+    emitente_nome_fantasia: str = ""
+    emitente_ie: str = ""
+    emitente_endereco_logradouro: str = ""
+    emitente_endereco_numero: str = ""
+    emitente_endereco_bairro: str = ""
+    emitente_endereco_municipio: str = ""
+    emitente_endereco_uf: str = "DF"
+    emitente_endereco_cep: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
