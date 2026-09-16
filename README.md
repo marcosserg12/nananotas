@@ -15,22 +15,41 @@
    - `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`: banco `nana_lanches` e usuário
      `nana_lanches_user` criados no servidor MySQL informado.
    - `SECRET_KEY`: qualquer texto aleatório longo (assina a sessão de login).
+     **Obrigatório** — o servidor recusa iniciar (`RuntimeError`) se essa
+     variável não for definida, para evitar assinar sessões com um valor
+     padrão publicamente conhecido.
    - `FOCUS_NFE_TOKEN`: token da conta Focus NFe (comece pelo ambiente de
      homologação, que é gratuito).
    - `FOCUS_NFE_AMBIENTE`: `homologacao` para testes, `producao` para notas reais.
-3. Aplique as migrações no banco:
+3. Crie o banco e o usuário no servidor MySQL (rode isto uma vez, conectado
+   como um usuário com privilégio de administrador, por exemplo `mysql -h
+   SEU_SERVIDOR_MYSQL -P 3306 -u root -p`), ajustando a senha para a mesma que foi
+   colocada em `DB_PASSWORD` no `.env`:
+   ```sql
+   CREATE DATABASE IF NOT EXISTS nana_lanches CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER IF NOT EXISTS 'nana_lanches_user'@'%' IDENTIFIED BY 'SUBSTITUA_POR_UMA_SENHA_FORTE';
+   GRANT ALL PRIVILEGES ON nana_lanches.* TO 'nana_lanches_user'@'%';
+   FLUSH PRIVILEGES;
+   ```
+4. Gere o script de migração inicial e revise-o antes de aplicar:
+   ```bash
+   alembic revision --autogenerate -m "estrutura inicial"
+   ```
+   Abra o arquivo criado em `migrations/versions/` e confira se as tabelas e
+   colunas geradas fazem sentido antes de seguir para o próximo passo.
+5. Aplique as migrações no banco:
    ```bash
    alembic upgrade head
    ```
-4. Crie o usuário administrador e o cliente "Consumidor Final":
+6. Crie o usuário administrador e o cliente "Consumidor Final":
    ```bash
    python -m app.seed
    ```
-5. Rode o servidor:
+7. Rode o servidor:
    ```bash
    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
-6. Acesse `http://localhost:8000` (ou `http://<ip-do-computador>:8000` de outro
+8. Acesse `http://localhost:8000` (ou `http://<ip-do-computador>:8000` de outro
    dispositivo na mesma rede Wi-Fi, como um tablet no balcão).
 
 ## Antes de emitir notas reais
