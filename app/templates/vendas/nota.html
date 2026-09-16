@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Nota fiscal - Orçamento {{ venda.numero_orcamento }}{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Nota fiscal — Orçamento nº {{ venda.numero_orcamento }}</h1>
+
+{% if nota is none %}
+<p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
+<form method="post" action="/vendas/{{ venda.id }}/nota/emitir">
+    <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
+</form>
+{% else %}
+<p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
+{% if nota.mensagem_erro %}
+<p class="text-red-600 mb-2">{{ nota.mensagem_erro }}</p>
+{% endif %}
+{% if nota.chave_acesso %}
+<p class="mb-2">Chave de acesso: {{ nota.chave_acesso }}</p>
+{% endif %}
+
+<div class="flex gap-2 mt-4">
+    <form method="post" action="/vendas/{{ venda.id }}/nota/consultar">
+        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Atualizar status</button>
+    </form>
+    {% if nota.url_danfe %}
+    <a href="{{ nota.url_danfe }}" target="_blank" class="bg-slate-800 text-white px-4 py-2 rounded">Imprimir cupom</a>
+    {% endif %}
+    {% if nota.status.value == "autorizada" %}
+    <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" onsubmit="return confirm('Cancelar esta nota fiscal?');">
+        <input type="hidden" name="motivo" value="Cancelamento solicitado pelo estabelecimento">
+        <button type="submit" class="bg-red-700 text-white px-4 py-2 rounded">Cancelar nota</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
