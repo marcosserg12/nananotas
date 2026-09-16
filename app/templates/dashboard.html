@@ -1,5 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Painel - Nana Lanches{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold">Bem-vindo, {{ usuario.username }}</h1>
+<h1 class="text-2xl font-bold mb-1">Bem-vindo, {{ usuario.username }}</h1>
+<p class="text-slate-600 mb-6">Vendas de hoje: {{ vendas|length }} — Total: R$ {{ "%.2f"|format(total) }}</p>
+
+<a href="/vendas/nova" class="inline-block mb-4 bg-emerald-700 text-white px-4 py-2 rounded">+ Nova Venda</a>
+
+<table class="w-full bg-white rounded shadow overflow-hidden">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Orçamento</th>
+            <th class="p-2">Cliente</th>
+            <th class="p-2">Hora</th>
+            <th class="p-2">Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for venda in vendas %}
+        <tr class="border-t">
+            <td class="p-2"><a class="underline" href="/vendas/{{ venda.id }}">{{ venda.numero_orcamento }}</a></td>
+            <td class="p-2">{{ venda.cliente.nome }}</td>
+            <td class="p-2">{{ venda.data_venda.strftime("%H:%M") }}</td>
+            <td class="p-2">R$ {{ "%.2f"|format(venda.valor_total) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
