@@ -29,13 +29,54 @@
 
 {% if nota is none %}
 <p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
+
 {% if venda.status.value == "pago" %}
-<form method="post" action="/vendas/{{ venda.id }}/nota/emitir">
-    <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
-</form>
+<div class="bg-white p-4 rounded shadow mb-4">
+    <h2 class="font-semibold mb-2">Resumo pra digitar no Emissor Gratuito do SEBRAE</h2>
+    <p class="text-sm text-slate-600 mb-2">Cliente: {{ venda.cliente.nome }} — Forma de pagamento: {{ venda.forma_pagamento or "-" }}</p>
+    <table class="w-full mb-3">
+        <thead class="text-left text-sm text-slate-500">
+            <tr>
+                <th class="pr-4">Produto</th>
+                <th class="pr-4">Qtd</th>
+                <th class="pr-4">Preço unit.</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in venda.itens %}
+            <tr>
+                <td class="pr-4">{{ item.produto.nome }}</td>
+                <td class="pr-4">{{ item.quantidade }}</td>
+                <td class="pr-4">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
+                <td>R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="font-semibold mb-3">Total: R$ {{ "%.2f"|format(venda.valor_total) }}</p>
+    <a href="https://sebrae.com.br/sites/PortalSebrae/produtoseservicos/emissornfe" target="_blank" class="inline-block bg-slate-800 text-white px-4 py-2 rounded mb-2">
+        Abrir Emissor Gratuito do SEBRAE
+    </a>
+    <form method="post" action="/vendas/{{ venda.id }}/nota/marcar-manual" class="flex flex-wrap gap-2 items-end mt-2">
+        <div>
+            <label class="block text-sm">Chave de acesso da nota (opcional)</label>
+            <input type="text" name="chave_acesso" maxlength="44" class="border rounded px-3 py-2 w-72">
+        </div>
+        <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Marcar nota como emitida</button>
+    </form>
+</div>
+
+<details class="mb-4">
+    <summary class="cursor-pointer text-slate-600 underline">Ou emitir automaticamente por um provedor pago (Focus NFe)</summary>
+    <form method="post" action="/vendas/{{ venda.id }}/nota/emitir" class="mt-2">
+        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
+    </form>
+</details>
 {% else %}
 <p class="text-amber-700">Finalize o pagamento antes de emitir a nota fiscal.</p>
 {% endif %}
+
 {% else %}
 <p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
 {% if nota.mensagem_erro %}
@@ -44,7 +85,9 @@
 {% if nota.chave_acesso %}
 <p class="mb-2">Chave de acesso: {{ nota.chave_acesso }}</p>
 {% endif %}
-
+{% if nota.provedor == "manual" %}
+<p class="text-sm text-slate-600">Nota marcada manualmente como emitida (via SEBRAE).</p>
+{% else %}
 <div class="flex gap-2 mt-4">
     <form method="post" action="/vendas/{{ venda.id }}/nota/consultar">
         <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Atualizar status</button>
@@ -59,5 +102,6 @@
     </form>
     {% endif %}
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -25,6 +25,27 @@ def emitir_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFis
     return nota
 
 
+def marcar_nota_emitida_manualmente(db: Session, venda_id: int, chave_acesso: str | None = None) -> NotaFiscal:
+    venda = db.get(Venda, venda_id)
+    if venda is None:
+        raise ValueError("Venda não encontrada")
+    if venda.status != StatusVenda.PAGO:
+        raise ValueError("Venda ainda não foi paga — não é possível marcar nota fiscal")
+
+    nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
+    if nota is None:
+        nota = NotaFiscal(venda_id=venda_id, referencia=f"manual-venda-{venda_id}")
+        db.add(nota)
+
+    nota.provedor = "manual"
+    nota.status = StatusNota.AUTORIZADA
+    nota.chave_acesso = chave_acesso or None
+    nota.mensagem_erro = None
+    db.commit()
+    db.refresh(nota)
+    return nota
+
+
 def consultar_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFiscal:
     nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
     if nota is None:

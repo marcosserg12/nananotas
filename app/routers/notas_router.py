@@ -41,6 +41,20 @@ def emitir(
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
 
 
+@router.post("/{venda_id}/nota/marcar-manual")
+def marcar_manual(
+    venda_id: int,
+    chave_acesso: str = Form(""),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    try:
+        notas_service.marcar_nota_emitida_manualmente(db, venda_id, chave_acesso or None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
+
+
 @router.post("/{venda_id}/nota/consultar")
 def consultar(
     venda_id: int,

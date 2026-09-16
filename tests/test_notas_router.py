@@ -182,6 +182,43 @@ def test_pagina_da_nota_sem_parcelas_nao_mostra_a_tabela(authed_client_com_provi
     assert "Vencimento" not in response.text
 
 
+def test_marcar_nota_emitida_manualmente_com_chave_de_acesso(authed_client_com_provider_falso, venda_paga):
+    client, provider_falso = authed_client_com_provider_falso
+
+    response = client.post(
+        f"/vendas/{venda_paga.id}/nota/marcar-manual",
+        data={"chave_acesso": "1" * 44},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert provider_falso.emitidas == []
+
+    pagina = client.get(f"/vendas/{venda_paga.id}/nota")
+    assert "autorizada" in pagina.text
+    assert "1" * 44 in pagina.text
+    assert "manualmente" in pagina.text
+
+
+def test_marcar_nota_emitida_manualmente_sem_chave_tambem_funciona(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/marcar-manual", follow_redirects=False)
+
+    assert response.status_code == 303
+
+    pagina = client.get(f"/vendas/{venda_paga.id}/nota")
+    assert "autorizada" in pagina.text
+
+
+def test_marcar_nota_emitida_manualmente_em_venda_nao_paga_retorna_400(authed_client_com_provider_falso, venda_nao_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_nao_paga.id}/nota/marcar-manual", follow_redirects=False)
+
+    assert response.status_code == 400
+
+
 def test_emitir_nota_duas_vezes_atualiza_registro_existente_em_vez_de_duplicar(
     authed_client_com_provider_falso, venda_paga, db_session
 ):
