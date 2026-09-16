@@ -1,3 +1,5 @@
+import sys
+
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -16,6 +18,24 @@ from app.routers import (
 
 app = FastAPI(title="Nana Lanches")
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+
+def verificar_secret_key_configurada(secret_key: str, sob_pytest: bool) -> None:
+    """Recusa iniciar com a SECRET_KEY padrão fora do ambiente de testes.
+
+    Sem isso, uma implantação sem `.env` (ou sem `SECRET_KEY` definido nele)
+    assinaria os cookies de sessão com um valor publicamente conhecido,
+    permitindo forjar sessões autenticadas. A checagem é pulada sob pytest
+    porque o ambiente de testes não possui (nem precisa de) um `.env`.
+    """
+    if secret_key == "change-me" and not sob_pytest:
+        raise RuntimeError(
+            "SECRET_KEY não configurado — defina uma chave aleatória em .env "
+            "antes de rodar em produção."
+        )
+
+
+verificar_secret_key_configurada(settings.secret_key, "pytest" in sys.modules)
 
 app.include_router(auth_router.router)
 app.include_router(dashboard_router.router)
