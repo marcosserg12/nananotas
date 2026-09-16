@@ -44,7 +44,10 @@ def consultar(
     usuario: Usuario = Depends(get_current_user),
     provider: FiscalProvider = Depends(get_fiscal_provider),
 ):
-    notas_service.consultar_nota(db, venda_id, provider)
+    try:
+        notas_service.consultar_nota(db, venda_id, provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
 
 

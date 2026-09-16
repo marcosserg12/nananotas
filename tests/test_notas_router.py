@@ -130,6 +130,14 @@ def test_cancelar_nota_chama_provedor_com_motivo(authed_client_com_provider_fals
     assert provider_falso.canceladas == [(f"venda-{venda_paga.id}", "Erro de digitação")]
 
 
+def test_consultar_nota_inexistente_retorna_400(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/consultar", follow_redirects=False)
+
+    assert response.status_code == 400
+
+
 def test_emitir_nota_com_venda_nao_paga_retorna_400(authed_client_com_provider_falso, venda_nao_paga):
     client, provider_falso = authed_client_com_provider_falso
 

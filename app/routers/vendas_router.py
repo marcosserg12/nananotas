@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models.usuario import Usuario
-from app.models.venda import Venda, VendaItem
+from app.models.venda import StatusVenda, Venda, VendaItem
 from app.services import clientes_service, parcelas_service, vendas_service
 
 router = APIRouter(prefix="/vendas")
@@ -81,6 +81,13 @@ def confirmar_pagamento(
         valor_pago_decimal = Decimal(valor_pago)
     except InvalidOperation:
         raise HTTPException(status_code=400, detail="Valor pago inválido")
+
+    venda = db.get(Venda, venda_id)
+    if venda is None:
+        raise HTTPException(status_code=400, detail="Venda não encontrada")
+    if venda.status != StatusVenda.ORCAMENTO:
+        raise HTTPException(status_code=400, detail="Venda já foi confirmada ou cancelada")
+
     try:
         parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas)
         parcelas_service.confirmar_venda(db, venda_id, valor_pago_decimal)
