@@ -1,7 +1,9 @@
 <ul class="border rounded bg-white divide-y">
     {% for produto in produtos %}
     <li class="p-2 hover:bg-slate-50 cursor-pointer"
-        onclick="document.getElementById('produto_id').value='{{ produto.id }}'; document.getElementById('produto_busca').value='{{ produto.nome }} ({{ produto.codigo_interno }})'; document.getElementById('resultado_busca').innerHTML='';">
+        data-produto-select
+        data-produto-id="{{ produto.id }}"
+        data-produto-label="{{ produto.nome }} ({{ produto.codigo_interno }})">
         {{ produto.nome }} — {{ produto.codigo_interno }} — R$ {{ "%.2f"|format(produto.preco_venda) }}
     </li>
     {% endfor %}

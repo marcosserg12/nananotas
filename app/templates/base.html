@@ -6,6 +6,23 @@
     <title>{% block title %}Nana Lanches{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        document.addEventListener("click", function (event) {
+            var produtoItem = event.target.closest("[data-produto-select]");
+            if (produtoItem) {
+                document.getElementById("produto_id").value = produtoItem.dataset.produtoId;
+                document.getElementById("produto_busca").value = produtoItem.dataset.produtoLabel;
+                document.getElementById("resultado_busca").innerHTML = "";
+                return;
+            }
+            var clienteItem = event.target.closest("[data-cliente-select]");
+            if (clienteItem) {
+                document.getElementById("cliente_id").value = clienteItem.dataset.clienteId;
+                document.getElementById("cliente_busca").value = clienteItem.dataset.clienteLabel;
+                document.getElementById("resultado_busca_cliente").innerHTML = "";
+            }
+        });
+    </script>
 </head>
 <body class="bg-gray-50 text-gray-900">
     {% if request.session.get("user_id") %}
