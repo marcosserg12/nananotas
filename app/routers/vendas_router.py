@@ -1,6 +1,6 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -42,7 +42,11 @@ def adicionar_item(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    vendas_service.adicionar_item(db, venda_id, produto_id, Decimal(quantidade))
+    try:
+        quantidade_decimal = Decimal(quantidade)
+    except InvalidOperation:
+        raise HTTPException(status_code=400, detail="Quantidade inválida")
+    vendas_service.adicionar_item(db, venda_id, produto_id, quantidade_decimal)
     venda = db.get(Venda, venda_id)
     return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
 
@@ -50,6 +54,8 @@ def adicionar_item(
 @router.post("/itens/{item_id}/remover", response_class=HTMLResponse)
 def remover_item(item_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     item = db.get(VendaItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
     venda_id = item.venda_id
     vendas_service.remover_item(db, item_id)
     venda = db.get(Venda, venda_id)

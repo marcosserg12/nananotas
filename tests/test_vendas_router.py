@@ -39,3 +39,27 @@ def test_adicionar_e_remover_item_na_venda(authed_client, db_session):
     detalhe = authed_client.get(f"/vendas/{venda.id}")
     assert detalhe.status_code == 200
     assert "Lanche" in detalhe.text
+
+
+def test_adicionar_item_com_quantidade_invalida_nao_quebra(authed_client, db_session):
+    from app.services import clientes_service, vendas_service
+
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Lanche", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    resposta = authed_client.post(
+        f"/vendas/{venda.id}/itens", data={"produto_id": produto.id, "quantidade": "abc"}
+    )
+
+    assert resposta.status_code == 400
+    assert "Quantidade" in resposta.text
+
+
+def test_remover_item_inexistente_nao_quebra(authed_client, db_session):
+    resposta = authed_client.post("/vendas/itens/99999/remover")
+
+    assert resposta.status_code == 404
