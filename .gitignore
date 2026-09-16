@@ -6,3 +6,6 @@ __pycache__/
 venv/
 *.db
 .pytest_cache/
+*.pfx
+*.p12
+173818253_NANA_LANCHES_COMERCIO_DE_ALIMENTOS_LTDA_2642378000
