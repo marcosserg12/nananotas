@@ -1,0 +1,31 @@
+<table id="itens-venda" class="w-full bg-white rounded shadow overflow-hidden">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Produto</th>
+            <th class="p-2">Qtd</th>
+            <th class="p-2">Preço unit.</th>
+            <th class="p-2">Total</th>
+            <th class="p-2"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in venda.itens %}
+        <tr class="border-t">
+            <td class="p-2">{{ item.produto.nome }}</td>
+            <td class="p-2">{{ item.quantidade }}</td>
+            <td class="p-2">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
+            <td class="p-2">R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
+            <td class="p-2">
+                <button hx-post="/vendas/itens/{{ item.id }}/remover" hx-target="#itens-venda" hx-swap="outerHTML"
+                        class="text-red-600 underline">Remover</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="border-t font-bold">
+            <td class="p-2" colspan="3">Total</td>
+            <td class="p-2" colspan="2">R$ {{ "%.2f"|format(venda.valor_total) }}</td>
+        </tr>
+    </tfoot>
+</table>

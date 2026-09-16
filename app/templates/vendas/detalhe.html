@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Orçamento {{ venda.numero_orcamento }} - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">Orçamento nº {{ venda.numero_orcamento }}</h1>
+<p class="text-slate-600 mb-4">Cliente: {{ venda.cliente.nome }} — Status: {{ venda.status.value }}</p>
+
+<div class="bg-white p-4 rounded shadow mb-4 relative">
+    <h2 class="font-semibold mb-2">Adicionar produto</h2>
+    <form hx-post="/vendas/{{ venda.id }}/itens" hx-target="#itens-venda" hx-swap="outerHTML" class="flex flex-wrap gap-2 items-end">
+        <div class="relative">
+            <label class="block text-sm">Produto</label>
+            <input type="text" id="produto_busca" hx-get="/produtos/buscar" hx-trigger="keyup changed delay:300ms"
+                   hx-target="#resultado_busca" name="termo" class="border rounded px-3 py-2" autocomplete="off">
+            <input type="hidden" id="produto_id" name="produto_id">
+            <div id="resultado_busca" class="absolute z-10"></div>
+        </div>
+        <div>
+            <label class="block text-sm">Quantidade</label>
+            <input type="text" name="quantidade" value="1" class="border rounded px-3 py-2 w-24">
+        </div>
+        <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Adicionar</button>
+    </form>
+</div>
+
+{% include "vendas/_itens.html" %}
+
+{% if venda.status.value == "orcamento" %}
+<a href="/vendas/{{ venda.id }}/pagamento" class="inline-block mt-4 bg-emerald-700 text-white px-4 py-2 rounded">
+    Ir para pagamento
+</a>
+{% else %}
+<a href="/vendas/{{ venda.id }}/nota" class="inline-block mt-4 bg-emerald-700 text-white px-4 py-2 rounded">
+    Ver nota fiscal
+</a>
+{% endif %}
+{% endblock %}

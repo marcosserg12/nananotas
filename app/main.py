@@ -5,7 +5,7 @@ from starlette.requests import Request
 
 from app.auth import NotAuthenticatedError
 from app.config import settings
-from app.routers import auth_router, clientes_router, dashboard_router, produtos_router
+from app.routers import auth_router, clientes_router, dashboard_router, produtos_router, vendas_router
 
 app = FastAPI(title="Nana Lanches")
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
@@ -14,6 +14,7 @@ app.include_router(auth_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(produtos_router.router)
 app.include_router(clientes_router.router)
+app.include_router(vendas_router.router)
 
 
 @app.exception_handler(NotAuthenticatedError)

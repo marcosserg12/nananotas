@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Nova Venda - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Nova Venda</h1>
+<form method="post" action="/vendas/nova" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
+    <div class="relative">
+        <label class="block text-sm font-medium">Cliente</label>
+        <input type="text" id="cliente_busca" value="{{ cliente_padrao.nome }}"
+               hx-get="/clientes/buscar" hx-trigger="keyup changed delay:300ms" hx-target="#resultado_busca_cliente"
+               name="termo" class="w-full border rounded px-3 py-2" autocomplete="off">
+        <input type="hidden" id="cliente_id" name="cliente_id" value="{{ cliente_padrao.id }}">
+        <div id="resultado_busca_cliente" class="absolute z-10 w-full"></div>
+    </div>
+    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Iniciar venda</button>
+</form>
+{% endblock %}
