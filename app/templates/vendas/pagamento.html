@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Pagamento - Orçamento {{ venda.numero_orcamento }}{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Pagamento — Orçamento nº {{ venda.numero_orcamento }}</h1>
+<p class="text-xl mb-4">Valor total: <strong>R$ {{ "%.2f"|format(venda.valor_total) }}</strong></p>
+<form method="post" action="/vendas/{{ venda.id }}/pagamento" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
+    <div>
+        <label class="block text-sm font-medium">Forma de pagamento</label>
+        <select name="forma_pagamento" class="w-full border rounded px-3 py-2">
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão de Crédito</option>
+            <option value="cartao_debito">Cartão de Débito</option>
+            <option value="pix">Pix</option>
+        </select>
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Parcelas</label>
+        <input type="number" name="numero_parcelas" value="1" min="1" class="w-full border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm font-medium">Valor pago</label>
+        <input type="text" name="valor_pago" value="{{ venda.valor_total }}" class="w-full border rounded px-3 py-2">
+    </div>
+    <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Confirmar venda</button>
+</form>
+{% endblock %}

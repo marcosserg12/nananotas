@@ -9,7 +9,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models.usuario import Usuario
 from app.models.venda import Venda, VendaItem
-from app.services import clientes_service, vendas_service
+from app.services import clientes_service, parcelas_service, vendas_service
 
 router = APIRouter(prefix="/vendas")
 templates = Jinja2Templates(directory="app/templates")
@@ -60,3 +60,23 @@ def remover_item(item_id: int, request: Request, db: Session = Depends(get_db), 
     vendas_service.remover_item(db, item_id)
     venda = db.get(Venda, venda_id)
     return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
+
+
+@router.get("/{venda_id}/pagamento", response_class=HTMLResponse)
+def pagamento_form(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    venda = db.get(Venda, venda_id)
+    return templates.TemplateResponse("vendas/pagamento.html", {"request": request, "venda": venda})
+
+
+@router.post("/{venda_id}/pagamento")
+def confirmar_pagamento(
+    venda_id: int,
+    forma_pagamento: str = Form(...),
+    numero_parcelas: int = Form(1),
+    valor_pago: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas)
+    parcelas_service.confirmar_venda(db, venda_id, Decimal(valor_pago))
+    return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
