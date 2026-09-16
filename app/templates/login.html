@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Entrar - Nana Lanches{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto mt-16 bg-white p-6 rounded-lg shadow">
+    <h1 class="text-xl font-bold mb-4">Nana Lanches</h1>
+    {% if erro %}
+    <p class="text-red-600 mb-4">{{ erro }}</p>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium">Usuário</label>
+            <input type="text" name="username" required class="w-full border rounded px-3 py-2">
+        </div>
+        <div>
+            <label class="block text-sm font-medium">Senha</label>
+            <input type="password" name="senha" required class="w-full border rounded px-3 py-2">
+        </div>
+        <button type="submit" class="w-full bg-slate-800 text-white py-2 rounded">Entrar</button>
+    </form>
+</div>
+{% endblock %}
