@@ -3,7 +3,8 @@
     <li class="p-2 hover:bg-slate-50 cursor-pointer"
         data-produto-select
         data-produto-id="{{ produto.id }}"
-        data-produto-label="{{ produto.nome }} ({{ produto.codigo_interno }})">
+        data-produto-label="{{ produto.nome }} ({{ produto.codigo_interno }})"
+        data-produto-preco="{{ produto.preco_venda }}">
         {{ produto.nome }} — {{ produto.codigo_interno }} — R$ {{ "%.2f"|format(produto.preco_venda) }}
     </li>
     {% endfor %}

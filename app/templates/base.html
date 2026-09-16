@@ -13,6 +13,10 @@
                 document.getElementById("produto_id").value = produtoItem.dataset.produtoId;
                 document.getElementById("produto_busca").value = produtoItem.dataset.produtoLabel;
                 document.getElementById("resultado_busca").innerHTML = "";
+                var precoInput = document.getElementById("preco_unitario_input");
+                if (precoInput) {
+                    precoInput.value = produtoItem.dataset.produtoPreco;
+                }
                 return;
             }
             var clienteItem = event.target.closest("[data-cliente-select]");

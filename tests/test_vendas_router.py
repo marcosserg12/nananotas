@@ -41,6 +41,45 @@ def test_adicionar_e_remover_item_na_venda(authed_client, db_session):
     assert "Lanche" in detalhe.text
 
 
+def test_adicionar_item_com_preco_informado_sobrescreve_preco_de_cadastro(authed_client, db_session):
+    from app.services import clientes_service, vendas_service
+
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Lanche", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    resposta = authed_client.post(
+        f"/vendas/{venda.id}/itens",
+        data={"produto_id": produto.id, "quantidade": "2", "preco_unitario": "8.00"},
+    )
+
+    assert resposta.status_code == 200
+    assert "16.00" in resposta.text
+    assert "20.00" not in resposta.text
+
+
+def test_adicionar_item_com_preco_invalido_nao_quebra(authed_client, db_session):
+    from app.services import clientes_service, vendas_service
+
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Lanche", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    resposta = authed_client.post(
+        f"/vendas/{venda.id}/itens",
+        data={"produto_id": produto.id, "quantidade": "1", "preco_unitario": "abc"},
+    )
+
+    assert resposta.status_code == 400
+    assert "Preço" in resposta.text
+
+
 def test_adicionar_item_com_quantidade_invalida_nao_quebra(authed_client, db_session):
     from app.services import clientes_service, vendas_service
 

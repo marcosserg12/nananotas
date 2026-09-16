@@ -34,6 +34,18 @@ def test_adicionar_item_usa_preco_do_produto_e_recalcula_total(db_session):
     assert len(venda.itens) == 1
 
 
+def test_adicionar_item_com_preco_informado_sobrescreve_preco_do_produto(db_session):
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    produto = _criar_produto(db_session, preco="10.00")
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    item = vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("2"), preco_unitario=Decimal("8.00"))
+    db_session.refresh(venda)
+
+    assert item.preco_unitario == Decimal("8.00")
+    assert venda.valor_total == Decimal("16.00")
+
+
 def test_remover_item_recalcula_total(db_session):
     cliente = clientes_service.garantir_consumidor_final(db_session)
     produto = _criar_produto(db_session, preco="10.00")

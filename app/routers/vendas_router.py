@@ -39,6 +39,7 @@ def adicionar_item(
     request: Request,
     produto_id: int = Form(...),
     quantidade: str = Form("1"),
+    preco_unitario: str = Form(""),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
@@ -46,7 +47,15 @@ def adicionar_item(
         quantidade_decimal = Decimal(quantidade)
     except InvalidOperation:
         raise HTTPException(status_code=400, detail="Quantidade inválida")
-    vendas_service.adicionar_item(db, venda_id, produto_id, quantidade_decimal)
+
+    preco_unitario_decimal = None
+    if preco_unitario:
+        try:
+            preco_unitario_decimal = Decimal(preco_unitario)
+        except InvalidOperation:
+            raise HTTPException(status_code=400, detail="Preço inválido")
+
+    vendas_service.adicionar_item(db, venda_id, produto_id, quantidade_decimal, preco_unitario_decimal)
     venda = db.get(Venda, venda_id)
     return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
 

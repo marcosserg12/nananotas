@@ -28,7 +28,13 @@ def criar_venda(db: Session, cliente_id: int) -> Venda:
     return venda
 
 
-def adicionar_item(db: Session, venda_id: int, produto_id: int, quantidade: Decimal) -> VendaItem:
+def adicionar_item(
+    db: Session,
+    venda_id: int,
+    produto_id: int,
+    quantidade: Decimal,
+    preco_unitario: Decimal | None = None,
+) -> VendaItem:
     venda = db.get(Venda, venda_id)
     if venda is None:
         raise ValueError("Venda não encontrada")
@@ -39,7 +45,7 @@ def adicionar_item(db: Session, venda_id: int, produto_id: int, quantidade: Deci
         venda_id=venda_id,
         produto_id=produto_id,
         quantidade=quantidade,
-        preco_unitario=produto.preco_venda,
+        preco_unitario=preco_unitario if preco_unitario is not None else produto.preco_venda,
     )
     db.add(item)
     db.commit()
