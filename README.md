@@ -67,6 +67,59 @@
   mineral `22011000`) vieram do sistema anterior e não substituem orientação
   contábil.
 
+## Emissão direta de NFC-e junto à Sefaz-DF (sem provedor terceirizado)
+
+O sistema fala diretamente com os servidores da SVRS (infraestrutura que o
+Distrito Federal usa para NFC-e) — não depende mais da Focus NFe por padrão
+(esse código continua no projeto, mas inativo).
+
+Antes de emitir qualquer nota real:
+
+1. **Registrar o CSC (Código de Segurança do Contribuinte)** no portal
+   restrito da Receita do DF (exige login com certificado digital):
+   "DF-e – Documentos Fiscais Eletrônicos" → "Código CSC". Preencher
+   `SEFAZ_CSC_ID` e `SEFAZ_CSC_TOKEN` no `.env` com o que for gerado lá —
+   sem isso, o QR Code da nota não funciona.
+2. Preencher `SEFAZ_CERTIFICADO_PATH` (caminho para o `.pfx`) e
+   `SEFAZ_CERTIFICADO_SENHA` no `.env`.
+3. Preencher os dados do emitente (`EMITENTE_*`) no `.env` com os dados reais
+   do Nana Lanches.
+4. Deixar `SEFAZ_AMBIENTE=homologacao` e testar uma emissão completa (uma
+   venda de teste, do início ao fim) antes de trocar para `producao`.
+5. **Antes de emitir a primeira nota em produção**, revisar
+   `docs/superpowers/notas-tecnicas/nfelib-api-referencia.md` — se esse
+   arquivo apontar alguma pendência sobre os campos de IBS/CBS (reforma
+   tributária, obrigatórios desde 03/08/2026), resolver isso primeiro. Notas
+   emitidas sem esses campos, se realmente exigidos pela versão instalada,
+   podem ser rejeitadas ou, pior, aceitas de forma não conforme.
+
+Se uma nota falhar por qualquer motivo, ela aparece automaticamente na lista
+de "vendas pendentes de nota fiscal" do painel — não existe modo de
+contingência automático (decisão consciente, ver
+`docs/superpowers/specs/2026-09-16-emissao-direta-sefaz-df-design.md`), então
+alguém precisa acompanhar essa lista e tentar de novo manualmente.
+
+### Limitações conhecidas desta integração
+
+- **Cancelamento de nota autorizada ainda não funciona.**
+  `SefazDiretoProvider.cancelar` (`app/services/fiscal/sefaz_direto/provider.py`)
+  lança `NotImplementedError` de propósito — construir o cancelamento exige
+  um construtor de XML novo para o evento `infEvento`/`tpEvento=110111`, que
+  ainda não existe neste projeto. A rota `/vendas/{id}/nota/cancelar`
+  detecta isso e devolve um erro 400 com mensagem clara ("Cancelamento de
+  nota ainda não está disponível na integração direta com a Sefaz —
+  funcionalidade pendente.") em vez de quebrar. Enquanto isso não for
+  implementado, a única alternativa é o recurso já existente de "marcar nota
+  como emitida manualmente" (`/vendas/{id}/nota/marcar-manual`) — ele serve
+  para *registrar* a situação no sistema, mas **não cancela a nota na
+  Sefaz de fato**; qualquer cancelamento real precisa ser resolvido fora do
+  sistema (ex.: diretamente no ambiente da Sefaz-DF ou com o contador) até
+  essa funcionalidade ser implementada.
+- **A página da DANFE-NFC-e (`/vendas/{id}/nota/danfe`) não tem link em
+  nenhuma outra tela do sistema ainda.** Para visualizá-la ou imprimi-la é
+  preciso digitar a URL diretamente no navegador, substituindo `{id}` pelo
+  id da venda.
+
 ## Rodando os testes
 
 ```bash

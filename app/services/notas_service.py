@@ -65,7 +65,13 @@ def cancelar_nota(db: Session, venda_id: int, motivo: str, provider: FiscalProvi
     if nota.status != StatusNota.AUTORIZADA:
         raise ValueError("Apenas notas autorizadas podem ser canceladas")
 
-    resultado = provider.cancelar(nota.referencia, motivo)
+    try:
+        resultado = provider.cancelar(nota.referencia, motivo)
+    except NotImplementedError:
+        raise ValueError(
+            "Cancelamento de nota ainda não está disponível na integração direta "
+            "com a Sefaz — funcionalidade pendente."
+        )
     _aplicar_resultado(nota, resultado)
     db.commit()
     db.refresh(nota)

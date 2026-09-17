@@ -35,6 +35,31 @@ class FiscalProviderFalso(FiscalProvider):
         return ResultadoFiscal(referencia=referencia, status="cancelada")
 
 
+class FiscalProviderFalsoCancelarNaoImplementado(FiscalProvider):
+    """Fake provider mimicking `SefazDiretoProvider.cancelar`, which raises
+    `NotImplementedError` because the cancellation-event XML builder doesn't
+    exist yet (see `app/services/fiscal/sefaz_direto/provider.py`). Used to
+    confirm the router/service layer turns that into a clean error response
+    instead of an unhandled 500."""
+
+    def emitir(self, venda):
+        return ResultadoFiscal(
+            referencia=f"venda-{venda.id}",
+            status="autorizada",
+            numero="1",
+            serie="1",
+            chave_acesso="1" * 44,
+            protocolo="abc123",
+            url_danfe="https://exemplo.com/danfe/1",
+        )
+
+    def consultar(self, referencia):
+        return ResultadoFiscal(referencia=referencia, status="autorizada", numero="1")
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError("SefazDiretoProvider.cancelar ainda não está implementado")
+
+
 class FiscalProviderFalsoDuasEtapas(FiscalProvider):
     """Fake provider whose first `emitir` call comes back "processando" and whose
     second comes back "autorizada" — used to exercise the create-then-update path
@@ -160,6 +185,22 @@ def test_cancelar_nota_ja_cancelada_retorna_400(authed_client_com_provider_falso
 
     assert response.status_code == 400
     assert provider_falso.canceladas == [(f"venda-{venda_paga.id}", "Erro de digitação")]
+
+
+def test_cancelar_nota_com_provedor_sem_suporte_retorna_erro_limpo(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+    provider_sem_cancelar = FiscalProviderFalsoCancelarNaoImplementado()
+    app.dependency_overrides[get_fiscal_provider] = lambda: provider_sem_cancelar
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    response = client.post(
+        f"/vendas/{venda_paga.id}/nota/cancelar",
+        data={"motivo": "Erro de digitação"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert "ainda não está disponível" in response.text
 
 
 def test_pagina_da_nota_mostra_as_parcelas_geradas(authed_client_com_provider_falso, venda_paga):

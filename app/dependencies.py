@@ -1,7 +1,7 @@
 from app.services.fiscal.base import FiscalProvider
-from app.services.fiscal.focus_nfe import FocusNFeProvider
+from app.services.fiscal.sefaz_direto.provider import SefazDiretoProvider
 
-_provider = FocusNFeProvider()
+_provider = SefazDiretoProvider()
 
 
 def get_fiscal_provider() -> FiscalProvider:
