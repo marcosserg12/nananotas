@@ -88,6 +88,8 @@ documentação nem memória), em
   `XMLSignerWithSHA1.sign()`.
 """
 
+import os
+
 import signxml
 from lxml import etree
 
@@ -124,12 +126,27 @@ def assinar_xml(xml_texto: str, certificado_path: str, certificado_senha: str) -
        XMLSignerWithSHA1` -- ver docstring do módulo para por que não se
        usa `Assinatura.assina_xml2` aqui).
     3. Levanta uma exceção com mensagem clara (nunca falha silenciosamente)
-       se a senha estiver errada, o certificado estiver expirado, o arquivo
-       não puder ser lido, ou o XML de entrada não tiver um `infNFe` com
-       `Id` para referenciar.
+       se o caminho do certificado não existir, a senha estiver errada, o
+       certificado estiver expirado, o arquivo não puder ser lido, ou o
+       XML de entrada não tiver um `infNFe` com `Id` para referenciar.
     4. Retorna a string do XML assinado, com `<Signature>` como irmão de
        `<infNFe>` (filho da raiz `<NFe>`), como o schema exige.
     """
+    if not os.path.exists(certificado_path):
+        # `erpbrasil.assinatura.certificado.Certificado` só trata `arquivo`
+        # como um path se `os.path.exists(arquivo)` for verdadeiro; caso
+        # contrário, uma string é tratada como o CONTEÚDO bruto do
+        # certificado (não como um path inválido) e acaba sendo passada
+        # como `str` para a API da `cryptography`, que espera bytes --
+        # resultando em um `TypeError` genérico e confuso ("Cannot convert
+        # ... instance to a buffer"), não em uma das exceções tipadas da
+        # própria `erpbrasil.assinatura` (`CertificadoSenhaInvalida` etc.).
+        # Um `SEFAZ_CERTIFICADO_PATH` mal configurado (typo, path errado no
+        # deploy) é um cenário real de produção, então essa checagem
+        # explícita evita esse `TypeError` pouco claro e falha cedo com uma
+        # mensagem inequívoca.
+        raise ValueError(f"Certificado não encontrado: {certificado_path}")
+
     try:
         certificado = Certificado(certificado_path, certificado_senha)
     except CertificadoSenhaInvalida as exc:

@@ -24,3 +24,14 @@ def test_assinar_xml_com_senha_errada_levanta_erro_claro():
         assert False, "deveria ter levantado uma exceção"
     except Exception as exc:
         assert "senha" in str(exc).lower() or "password" in str(exc).lower() or "invalid" in str(exc).lower()
+
+
+def test_assinar_xml_com_certificado_inexistente_levanta_value_error_claro():
+    try:
+        assinatura.assinar_xml(XML_TESTE, "tests/fixtures/NAO_EXISTE.pfx", "senha-teste")
+        assert False, "deveria ter levantado uma exceção"
+    except TypeError:
+        assert False, "não deveria vazar um TypeError cru da cryptography -- deve ser um ValueError claro"
+    except ValueError as exc:
+        mensagem = str(exc).lower()
+        assert "não encontrado" in mensagem or "not found" in mensagem or "nao_existe.pfx" in mensagem
