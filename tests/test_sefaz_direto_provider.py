@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.models.nota_fiscal import NotaFiscal, StatusNota
 from app.services import clientes_service, produtos_service, vendas_service
+from app.services.fiscal.sefaz_direto import numeracao
 from app.services.fiscal.sefaz_direto.provider import SefazDiretoProvider
 
 
@@ -28,6 +29,8 @@ def emitente_configurado(monkeypatch):
     monkeypatch.setattr(settings, "emitente_endereco_uf", "DF")
     monkeypatch.setattr(settings, "emitente_endereco_cep", "70719040")
     monkeypatch.setattr(settings, "sefaz_ambiente", "homologacao")
+    monkeypatch.setattr(settings, "sefaz_csc_id", "1")
+    monkeypatch.setattr(settings, "sefaz_csc_token", "ABCDEF0123456789ABCDEF0123456789")
     return settings
 
 
@@ -131,6 +134,89 @@ def test_emitir_com_erro_de_rede_retorna_rejeitada_em_vez_de_lancar(db_session):
     assert resultado.status == "rejeitada"
     assert resultado.status != "processando"
     assert "conexão" in resultado.mensagem_erro.lower() or "conex" in resultado.mensagem_erro.lower()
+
+
+def test_emitir_com_sucesso_define_url_danfe_para_a_rota_local(db_session):
+    """Important #4 da revisão final do branch: `url_danfe` nunca era
+    preenchido no sucesso, então o link "Imprimir cupom" de `nota.html`
+    nunca aparecia com este provedor -- a única forma de chegar no DANFE era
+    digitar a rota manualmente. Confirma que `emitir` agora popula
+    `url_danfe` apontando para a rota local do DANFE (Task 7)."""
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", return_value="<xml-assinado/>"), \
+         patch("app.services.fiscal.sefaz_direto.provider.webservice_client.autorizar") as autorizar_mock:
+        autorizar_mock.return_value = {
+            "status": "autorizado",
+            "protocolo": "153260000000015",
+            "chave_acesso": "5" * 44,
+            "mensagem": "Autorizado o uso da NF-e",
+        }
+        resultado = provider.emitir(venda)
+
+    assert resultado.url_danfe == f"/vendas/{venda.id}/nota/danfe"
+
+
+def test_emitir_com_erro_de_assinatura_apos_reserva_registra_numero_pendente_de_inutilizacao(db_session):
+    """Important #3 da revisão final do branch: `numeracao.
+    registrar_falha_apos_reserva` existe e é testado isoladamente, mas nada
+    em produção o chamava -- `numeros_reservados_nao_emitidos` ficava
+    permanentemente vazio mesmo quando números eram "queimados" por falhas
+    depois da reserva. Confirma que uma falha de assinatura (depois que o
+    número já foi reservado) registra esse número como pendente."""
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-errada-de-proposito")
+
+    with patch(
+        "app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml",
+        side_effect=Exception("senha do certificado inválida"),
+    ):
+        resultado = provider.emitir(venda)
+
+    assert resultado.status == "rejeitada"
+    pendentes = numeracao.numeros_reservados_nao_emitidos(db_session, serie=1)
+    assert len(pendentes) == 1
+    assert pendentes[0] == 1  # primeira reserva desta série neste teste
+
+
+def test_emitir_com_rejeicao_da_sefaz_apos_reserva_registra_numero_pendente_de_inutilizacao(db_session):
+    """Mesmo achado do teste acima, mas para o caminho de rejeição pela
+    Sefaz (não uma exceção) -- também precisa registrar o número como
+    pendente, porque o número reservado para esta tentativa nunca será
+    reenviado."""
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", return_value="<xml-assinado/>"), \
+         patch("app.services.fiscal.sefaz_direto.provider.webservice_client.autorizar") as autorizar_mock:
+        autorizar_mock.return_value = {"status": "rejeitado", "mensagem": "Rejeicao: Falha no Schema XML"}
+        resultado = provider.emitir(venda)
+
+    assert resultado.status == "rejeitada"
+    pendentes = numeracao.numeros_reservados_nao_emitidos(db_session, serie=1)
+    assert len(pendentes) == 1
+
+
+def test_emitir_com_sucesso_nao_registra_numero_como_pendente(db_session):
+    """Contraprova do teste acima: um número que FOI autorizado com sucesso
+    não deve aparecer em `numeros_reservados_nao_emitidos`."""
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", return_value="<xml-assinado/>"), \
+         patch("app.services.fiscal.sefaz_direto.provider.webservice_client.autorizar") as autorizar_mock:
+        autorizar_mock.return_value = {
+            "status": "autorizado",
+            "protocolo": "153260000000015",
+            "chave_acesso": "5" * 44,
+            "mensagem": "Autorizado o uso da NF-e",
+        }
+        resultado = provider.emitir(venda)
+
+    assert resultado.status == "autorizada"
+    pendentes = numeracao.numeros_reservados_nao_emitidos(db_session, serie=1)
+    assert pendentes == []
 
 
 def test_emitir_com_ambiente_invalido_levantando_keyerror_no_webservice_retorna_rejeitada(db_session):

@@ -4,7 +4,7 @@ from app.models.nota_fiscal import NotaFiscal
 from app.models.venda import Venda
 from app.services.fiscal.base import FiscalProvider, ResultadoFiscal
 from app.services.fiscal.sefaz_direto import assinatura, webservice_client, xml_builder
-from app.services.fiscal.sefaz_direto.numeracao import reservar_proximo_numero
+from app.services.fiscal.sefaz_direto.numeracao import registrar_falha_apos_reserva, reservar_proximo_numero
 
 _PREFIXO_REFERENCIA = "nfce-venda-"
 
@@ -59,6 +59,12 @@ def _buscar_nota_por_referencia(referencia: str) -> NotaFiscal:
 
 
 class SefazDiretoProvider(FiscalProvider):
+    # Identificador persistido em `NotaFiscal.provedor` (ver
+    # `notas_service.emitir_nota`) -- exposto como constante de classe para
+    # que `notas_service` não precise adivinhar/hardcodar o nome do provedor
+    # ativo a partir do nome da classe.
+    NOME_PROVEDOR = "sefaz_direto"
+
     def __init__(
         self,
         certificado_path: str | None = None,
@@ -71,6 +77,12 @@ class SefazDiretoProvider(FiscalProvider):
 
     def emitir(self, venda: Venda) -> ResultadoFiscal:
         referencia = f"nfce-venda-{venda.id}"
+        # `numero` só é atribuído depois que a reserva (abaixo) tiver sucesso --
+        # continua None se a própria reserva falhar, para que
+        # `_registrar_falha_apos_reserva_se_necessario` (Important #3) saiba
+        # distinguir "número nunca chegou a ser reservado" (nada a registrar)
+        # de "número reservado, mas emissão falhou depois" (precisa registrar).
+        numero: int | None = None
         try:
             db = SessionLocal()
             try:
@@ -82,6 +94,7 @@ class SefazDiretoProvider(FiscalProvider):
             xml_assinado = assinatura.assinar_xml(xml_sem_assinar, self.certificado_path, self.certificado_senha)
             resultado_ws = webservice_client.autorizar(xml_assinado, ambiente=self.ambiente)
         except Exception as exc:
+            self._registrar_falha_apos_reserva_se_necessario(numero)
             return ResultadoFiscal(referencia=referencia, status="rejeitada", mensagem_erro=str(exc))
 
         if resultado_ws["status"] == "autorizado":
@@ -92,12 +105,50 @@ class SefazDiretoProvider(FiscalProvider):
                 serie="1",
                 chave_acesso=resultado_ws.get("chave_acesso"),
                 protocolo=resultado_ws.get("protocolo"),
+                # Rota do DANFE local (Task 7) -- este provedor gera o cupom
+                # localmente (QR Code próprio), ao contrário do Focus NFe, que
+                # populava este campo com um link externo. Sem isso,
+                # nota.html nunca mostra o link "Imprimir cupom" (Important #4).
+                url_danfe=f"/vendas/{venda.id}/nota/danfe",
             )
+        # Rejeitado pela Sefaz ou erro de comunicação depois que o número já
+        # foi reservado: o número fica "queimado" (nunca será reenviado com
+        # este mesmo nNF) e precisa ser rastreado para inutilização formal
+        # futura junto à Sefaz -- ver Important #3.
+        self._registrar_falha_apos_reserva_se_necessario(numero)
         return ResultadoFiscal(
             referencia=referencia,
             status="rejeitada",
             mensagem_erro=resultado_ws.get("mensagem") or "Falha desconhecida na emissão",
         )
+
+    @staticmethod
+    def _registrar_falha_apos_reserva_se_necessario(numero: int | None) -> None:
+        """Marca `numero` (se um número já havia sido reservado) como
+        pendente de inutilização -- ver `numeracao.registrar_falha_apos_reserva`
+        e `numeracao.numeros_reservados_nao_emitidos`. Sem isso, todo número
+        "queimado" por uma emissão que falhou depois da reserva (erro de
+        assinatura, rede, ou rejeição da Sefaz) desaparecia silenciosamente,
+        deixando o mecanismo de rastreamento de inutilização (Task 8) inerte
+        em produção (Important #3 da revisão final do branch).
+
+        Abre sua própria `Session` (mesmo padrão já usado para
+        `reservar_proximo_numero`/`_buscar_nota_por_referencia` acima --
+        `FiscalProvider.emitir` não recebe uma `Session` de fora). Qualquer
+        falha ao REGISTRAR essa pendência (ex.: erro de banco) é engolida
+        aqui de propósito -- é um registro de acompanhamento best-effort, e
+        não deve mascarar/sobrescrever o resultado real (autorizada/rejeitada)
+        da emissão que `emitir` está retornando.
+        """
+        if numero is None:
+            return
+        db = SessionLocal()
+        try:
+            registrar_falha_apos_reserva(db, serie=1, numero=numero)
+        except Exception:
+            pass
+        finally:
+            db.close()
 
     def consultar(self, referencia: str) -> ResultadoFiscal:
         try:
