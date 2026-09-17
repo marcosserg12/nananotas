@@ -114,6 +114,15 @@ _CODIGOS_CSTAT_NAO_ENCONTRADO = {"217", "218"}
 _CODIGO_CSTAT_EVENTO_REGISTRADO = "135"
 _CODIGO_CSTAT_INUTILIZADO = "102"
 
+# cStat de LOTE (não de nota individual): "103" (lote recebido com sucesso,
+# fluxo assíncrono normalmente ainda em processamento) e "104" (lote
+# processado). Com indSinc=1 (sempre usado abaixo -- ver _montar_envi_nfe),
+# a Sefaz deveria sempre responder de forma síncrona com <protNFe> já
+# preenchido, nunca com um desses códigos "soltos" sem <infProt> -- mas
+# tratamos esse caso defensivamente em vez de presumir que nunca acontece
+# (achado "Important #10" da revisão final do branch).
+_CODIGOS_CSTAT_LOTE = {"103", "104"}
+
 # cUF (Distrito Federal) e mod (NFC-e) fixos -- mesmos valores hardcoded em
 # `xml_builder.CUF_EMITENTE`/`Tmod.VALUE_65`, porque este sistema inteiro só
 # emite NFC-e para um único emitente no DF (Nana Lanches), nunca NF-e (mod
@@ -187,14 +196,61 @@ def _parsear_resposta(response_text: str) -> tuple["ElementTree.Element | None",
         return None, f"Resposta da Sefaz não é um XML válido: {exc}"
 
 
+def _gerar_id_lote() -> str:
+    """Gera um `idLote` numérico razoavelmente único por envio (timestamp em
+    milissegundos). O schema (`TEnviNFe.idLote`) só exige `[0-9]{1,15}` --
+    não há semântica de negócio atribuída pela Sefaz além de "identificador
+    do lote enviado pelo contribuinte", e este sistema não gerencia lotes de
+    verdade (sempre envia 1 nota por lote -- ver `_montar_envi_nfe`)."""
+    return str(int(datetime.now().timestamp() * 1000))
+
+
+def _montar_envi_nfe(xml_nfe_assinado: str, id_lote: str) -> str:
+    """Envolve o XML assinado da NFC-e no elemento raiz `enviNFe`
+    (`TEnviNFe`, `enviNFe_v4.00.xsd`) -- o elemento de fato exigido pelo
+    webservice de autorização como corpo do pedido, não um `<NFe>` cru (ver
+    achado "Critical #2" da revisão final do branch: `enviNFe_v4.00.xsd`
+    declara `enviNFe` como elemento global do tipo `TEnviNFe`
+    -- `idLote`/`indSinc`/um-ou-mais `NFe`/atributo `versao` -- e um `<NFe>`
+    solto na raiz falha a validação contra esse XSD; confirmado nesta task
+    com `lxml.etree.XMLSchema` contra o XSD de fato empacotado na `nfelib`
+    instalada -- ver `tests/test_sefaz_webservice_client.py` e o relatório
+    desta task).
+
+    `indSinc` é fixo em "1": NFC-e (modelo 65) deve sempre ser enviada em
+    lote síncrono de uma nota só (pesquisa da Task 5, já assumida no
+    parsing de resposta abaixo) -- diferente da NF-e (modelo 55), que aceita
+    lotes assíncronos de até 50 notas (`TEnviNFe.NFe: max_occurs=50`, mas o
+    uso aqui é sempre de exatamente 1).
+
+    Construção por concatenação de string (mesmo estilo já usado neste
+    módulo em `_montar_envelope`/`_montar_cons_sit_nfe`) em vez de montar um
+    `EnviNfe`/`TenviNfe` da `nfelib` e resserializar: `xml_nfe_assinado` já
+    é uma string XML pronta (assinada -- `<Signature>` já embutido por
+    `assinatura.assinar_xml`), e resserializá-la via dataclass arriscaria
+    reconstruir/reordenar/renamespacear a assinatura já calculada, invalidando
+    o digest. Embutir a string assinada diretamente, sem tocar nela, evita
+    esse risco.
+    """
+    return (
+        '<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+        f"<idLote>{id_lote}</idLote>"
+        "<indSinc>1</indSinc>"
+        f"{xml_nfe_assinado}"
+        "</enviNFe>"
+    )
+
+
 def autorizar(xml_assinado: str, ambiente: str = "homologacao") -> dict:
-    """Envia o XML assinado da NFC-e para autorização (lote de 1 nota).
+    """Envia o XML assinado da NFC-e para autorização, envolto no envelope
+    `enviNFe` obrigatório (lote síncrono de 1 nota -- ver `_montar_envi_nfe`).
 
     Retorna um dict com `status` em {"autorizado", "rejeitado", "erro"},
     `protocolo`, `chave_acesso` e `mensagem`.
     """
     url = ENDPOINTS[ambiente]["autorizacao"]
-    response, erro = _postar_envelope(url, xml_assinado, _NAMESPACE_AUTORIZACAO, _OPERACAO_AUTORIZACAO)
+    envi_nfe = _montar_envi_nfe(xml_assinado, _gerar_id_lote())
+    response, erro = _postar_envelope(url, envi_nfe, _NAMESPACE_AUTORIZACAO, _OPERACAO_AUTORIZACAO)
     if erro:
         return {"status": "erro", "protocolo": None, "chave_acesso": None, "mensagem": erro}
 
@@ -203,6 +259,31 @@ def autorizar(xml_assinado: str, ambiente: str = "homologacao") -> dict:
         return {"status": "erro", "protocolo": None, "chave_acesso": None, "mensagem": erro_parse}
 
     inf_prot = _localizar_primeiro(raiz, "infProt")
+    if inf_prot is None:
+        # Sem <infProt>: pode ser um cStat de LOTE (103/104 -- ver
+        # _CODIGOS_CSTAT_LOTE) em vez de um cStat de NOTA. Com indSinc=1 a
+        # Sefaz deveria sempre responder com <infProt> preenchido, mas se
+        # isso não acontecer não podemos presumir "rejeitado" -- a nota pode
+        # muito bem ter sido autorizada e só não sabemos ainda. Tratado como
+        # "erro" (situação indeterminada, precisa de acompanhamento via
+        # consultar_protocolo), nunca como "rejeitado" (que sinalizaria,
+        # incorretamente, que a nota definitivamente não foi aceita).
+        cstat_lote = _texto(raiz, "cStat")
+        if cstat_lote in _CODIGOS_CSTAT_LOTE:
+            return {
+                "status": "erro",
+                "protocolo": None,
+                "chave_acesso": None,
+                "mensagem": (
+                    f"Lote recebido pela Sefaz (cStat={cstat_lote}: "
+                    f"{_texto(raiz, 'xMotivo') or 'sem motivo informado'}), mas sem protocolo da "
+                    "nota (infProt) na resposta -- inesperado para envio síncrono (indSinc=1). "
+                    "O status real da nota é desconhecido; consulte pela chave de acesso "
+                    "(consultar_protocolo) antes de tratar esta emissão como definitivamente "
+                    "rejeitada."
+                ),
+            }
+
     origem = inf_prot if inf_prot is not None else raiz
     cstat = _texto(origem, "cStat")
     mensagem = _texto(origem, "xMotivo") or ""
