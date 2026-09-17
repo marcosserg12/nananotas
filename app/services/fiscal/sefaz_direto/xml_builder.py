@@ -71,6 +71,45 @@ _AMBIENTES = {"homologacao": Tamb.VALUE_2, "producao": Tamb.VALUE_1}
 
 _PESOS_MODULO_11 = [2, 3, 4, 5, 6, 7, 8, 9]
 
+# Dados do emitente que o schema exige preenchidos (xBairro/CEP/IE/etc. têm
+# patterns obrigatórios no XSD -- vazios produzem um XML bem-formado mas
+# inválido, sem levantar exceção nenhuma se não for checado explicitamente).
+# `emitente_endereco_numero` fica de fora: _montar_emit já cai para "SN"
+# (sem número) quando está vazio, então nunca chega a virar um campo
+# obrigatório vazio. `emitente_endereco_uf` também fica de fora: tem default
+# não vazio ("DF") em Settings, por ser consumido como Enum (TufEmi).
+# `emitente_nome_fantasia` é opcional no schema (xFant), por isso não entra.
+_CAMPOS_EMITENTE_OBRIGATORIOS = {
+    "EMITENTE_CNPJ": "emitente_cnpj",
+    "EMITENTE_RAZAO_SOCIAL": "emitente_razao_social",
+    "EMITENTE_IE": "emitente_ie",
+    "EMITENTE_ENDERECO_LOGRADOURO": "emitente_endereco_logradouro",
+    "EMITENTE_ENDERECO_BAIRRO": "emitente_endereco_bairro",
+    "EMITENTE_ENDERECO_MUNICIPIO": "emitente_endereco_municipio",
+    "EMITENTE_ENDERECO_CEP": "emitente_endereco_cep",
+}
+
+
+def _validar_emitente_configurado() -> None:
+    """Falha rápido com um ValueError claro se algum dado obrigatório do
+    emitente não foi configurado via .env, em vez de deixar
+    `montar_nfce_xml` retornar silenciosamente um XML bem-formado mas
+    inválido pelo schema -- exatamente o tipo de falha silenciosa que este
+    plano inteiro existe para evitar (aqui aplicado a "nunca produzir
+    silenciosamente um documento não conforme", a mesma lógica de "nunca
+    reportar silenciosamente uma emissão como bem-sucedida quando falhou").
+    """
+    faltando = [
+        chave_env
+        for chave_env, atributo in _CAMPOS_EMITENTE_OBRIGATORIOS.items()
+        if not getattr(settings, atributo)
+    ]
+    if faltando:
+        raise ValueError(
+            "Dados do emitente incompletos no .env: "
+            f"{', '.join(faltando)}. Preencha esses valores antes de emitir NFC-e."
+        )
+
 
 def _somente_digitos(valor: str | None) -> str:
     return "".join(c for c in (valor or "") if c.isdigit())
@@ -169,7 +208,11 @@ def _montar_emit() -> "Tnfe.InfNfe.Emit":
         xFant=settings.emitente_nome_fantasia or None,
         enderEmit=ender_emit,
         IE="ISENTO" if ie.upper() == "ISENTO" else _somente_digitos(ie),
-        CRT=EmitCrt.VALUE_1,  # Simples Nacional
+        # Simples Nacional -- inferido do uso pré-existente de códigos CSOSN
+        # em focus_nfe.py (CSOSN é específico do Simples Nacional), NÃO
+        # confirmado de forma independente com o negócio. Verificar antes de
+        # emitir em produção.
+        CRT=EmitCrt.VALUE_1,
     )
 
 
@@ -290,6 +333,8 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     elemento raiz `<NFe>`. Isso foi confirmado manualmente nesta task e não
     é um defeito de construção -- ver o relatório da task.
     """
+    _validar_emitente_configurado()
+
     cnf = _gerar_codigo_numerico_aleatorio()
     chave = _montar_chave_acesso(numero, serie, cnf, tp_emis="1", venda=venda)
 

@@ -181,6 +181,41 @@ def test_montar_nfce_xml_e_estruturalmente_valido_pelo_schema_da_nfelib(db_sessi
     assert outros_erros == [], f"erros de schema inesperados: {outros_erros}"
 
 
+def test_montar_nfce_xml_levanta_erro_claro_se_emitente_incompleto(db_session, monkeypatch):
+    """Reprodução do achado do revisor: com EMITENTE_IE,
+    EMITENTE_ENDERECO_BAIRRO e EMITENTE_ENDERECO_CEP em branco -- exatamente
+    como .env.example os distribui -- montar_nfce_xml não deve retornar
+    silenciosamente um XML bem-formado porém inválido pelo schema (xBairro
+    abaixo do mínimo, CEP e IE fora do pattern). Deve falhar rápido com uma
+    mensagem clara nomeando os campos faltantes."""
+    monkeypatch.setattr(settings, "emitente_ie", "")
+    monkeypatch.setattr(settings, "emitente_endereco_bairro", "")
+    monkeypatch.setattr(settings, "emitente_endereco_cep", "")
+    venda = _venda_com_item(db_session)
+
+    with pytest.raises(ValueError) as exc_info:
+        xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    mensagem = str(exc_info.value)
+    assert "EMITENTE_IE" in mensagem
+    assert "EMITENTE_ENDERECO_BAIRRO" in mensagem
+    assert "EMITENTE_ENDERECO_CEP" in mensagem
+
+
+def test_montar_nfce_xml_endereco_sem_numero_nao_e_tratado_como_faltante(db_session, monkeypatch):
+    """`emitente_endereco_numero` em branco não deve disparar a validação de
+    emitente incompleto -- _montar_emit já cai para "SN" (sem número) nesse
+    caso, então não chega a produzir um campo obrigatório vazio no XML."""
+    monkeypatch.setattr(settings, "emitente_endereco_numero", "")
+    venda = _venda_com_item(db_session)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    nro = raiz.find(".//nfe:emit/nfe:enderEmit/nfe:nro", NS)
+    assert nro.text == "SN"
+
+
 def test_montar_nfce_xml_chave_de_acesso_tem_44_digitos_e_dv_correto(db_session):
     """Confirma que o DV (dígito verificador, módulo 11) da chave de acesso
     embutida em Id/cDV está matematicamente correto, usando o mesmo
