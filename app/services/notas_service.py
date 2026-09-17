@@ -110,6 +110,6 @@ def _aplicar_resultado(nota: NotaFiscal, resultado) -> None:
     nota.serie = resultado.serie or nota.serie
     nota.chave_acesso = resultado.chave_acesso or nota.chave_acesso
     nota.protocolo = resultado.protocolo or nota.protocolo
-    nota.url_danfe = resultado.url_danfe
-    nota.url_xml = resultado.url_xml
+    nota.url_danfe = resultado.url_danfe or nota.url_danfe
+    nota.url_xml = resultado.url_xml or nota.url_xml
     nota.mensagem_erro = resultado.mensagem_erro

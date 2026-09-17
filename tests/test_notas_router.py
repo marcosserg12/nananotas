@@ -428,3 +428,91 @@ def test_emitir_nota_duas_vezes_atualiza_registro_existente_em_vez_de_duplicar(
     assert len(notas) == 1
     assert notas[0].status.value == "autorizada"
     assert notas[0].numero == "2"
+
+
+class FiscalProviderFalsoConsultaSemUrlDanfe(FiscalProvider):
+    """Fake provider cujo `consultar` reflete `SefazDiretoProvider.consultar`
+    na parte que motivou o Important #1 da re-revisão do fix wave final:
+    devolve `status="autorizada"` mas SEM `url_danfe` (essa integração não
+    recebe um link externo de DANFE de nenhum provedor -- o link é sempre o
+    da própria rota `/nota/danfe` deste app, atribuído só no `emitir`)."""
+
+    def emitir(self, venda):
+        return ResultadoFiscal(
+            referencia=f"venda-{venda.id}",
+            status="autorizada",
+            numero="1",
+            serie="1",
+            chave_acesso="1" * 44,
+            protocolo="abc123",
+            url_danfe=f"/vendas/{venda.id}/nota/danfe",
+        )
+
+    def consultar(self, referencia):
+        return ResultadoFiscal(referencia=referencia, status="autorizada", numero="1")
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError
+
+
+def test_consultar_com_sucesso_nao_apaga_url_danfe_ja_gravado(authed_client_com_provider_falso, venda_paga):
+    """Regressão do Important #1 encontrado na re-revisão do fix wave final:
+    `_aplicar_resultado` sobrescrevia `nota.url_danfe` incondicionalmente, e
+    como `SefazDiretoProvider.consultar` nunca preenche esse campo, o link
+    "Imprimir cupom" desaparecia pra sempre no primeiro clique em "Atualizar
+    status" -- mesmo numa consulta bem-sucedida."""
+    client, _ = authed_client_com_provider_falso
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoConsultaSemUrlDanfe()
+
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+    pagina_apos_emitir = client.get(f"/vendas/{venda_paga.id}/nota")
+    assert "Imprimir cupom" in pagina_apos_emitir.text
+
+    client.post(f"/vendas/{venda_paga.id}/nota/consultar")
+    pagina_apos_consultar = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert "Imprimir cupom" in pagina_apos_consultar.text
+
+
+class FiscalProviderFalsoFalhaTransitoriaNaConsulta(FiscalProvider):
+    """Fake provider cujo `consultar` simula uma falha transitória de rede
+    (retorna `status="rejeitada"` sem chave/protocolo) -- o mesmo formato
+    que `SefazDiretoProvider.consultar` devolve nesse caso, per Important #6
+    da revisão final do branch."""
+
+    def emitir(self, venda):
+        return ResultadoFiscal(
+            referencia=f"venda-{venda.id}",
+            status="autorizada",
+            numero="1",
+            serie="1",
+            chave_acesso="1" * 44,
+            protocolo="abc123",
+            url_danfe=f"/vendas/{venda.id}/nota/danfe",
+        )
+
+    def consultar(self, referencia):
+        return ResultadoFiscal(referencia=referencia, status="rejeitada", mensagem_erro="Falha de conexão: timeout")
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError
+
+
+def test_falha_transitoria_na_consulta_nao_oferece_emitir_nota_de_novo(authed_client_com_provider_falso, venda_paga):
+    """Regressão do Important #2 encontrado na re-revisão do fix wave final:
+    a condição de retry do template ('nota is none or status == rejeitada')
+    reagia também a uma nota já AUTORIZADA que só falhou transitoriamente ao
+    consultar -- oferecendo "emitir de novo" pra uma venda que já tinha uma
+    NFC-e válida, arriscando duplicar a nota. A condição precisa considerar
+    que uma nota "rejeitada" com `chave_acesso` preenchida já foi autorizada
+    de verdade em algum momento e não deve ser re-emitida."""
+    client, _ = authed_client_com_provider_falso
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoFalhaTransitoriaNaConsulta()
+
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+    client.post(f"/vendas/{venda_paga.id}/nota/consultar")
+    pagina = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert "Chave de acesso" in pagina.text
+    assert "Atualizar status" in pagina.text
+    assert "Gerar Cupom Fiscal" not in pagina.text

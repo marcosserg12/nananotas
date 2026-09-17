@@ -27,7 +27,7 @@
 </table>
 {% endif %}
 
-{% if nota is none or nota.status.value == "rejeitada" %}
+{% if nota is none or (nota.status.value == "rejeitada" and not nota.chave_acesso) %}
 {% if nota is none %}
 <p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
 {% else %}
@@ -86,8 +86,10 @@
 {% endif %}
 
 {% else %}
-{# nota existe e o status NÃO é "rejeitada" (esse caso é tratado no bloco de retry acima) --
-   normalmente "autorizada"/"cancelada"/"processando". #}
+{# nota existe e (o status NÃO é "rejeitada", ou é "rejeitada" mas já tem chave_acesso --
+   nesse caso a nota pode ter sido autorizada de verdade na Sefaz apesar da falha ao
+   consultar; não oferecemos "emitir de novo" aqui pra não arriscar duplicar a nota,
+   só "Atualizar status" pra confirmar o que realmente aconteceu). #}
 <p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
 {% if nota.mensagem_erro %}
 <p class="text-red-600 mb-2">{{ nota.mensagem_erro }}</p>
