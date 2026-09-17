@@ -60,6 +60,45 @@ class FiscalProviderFalsoCancelarNaoImplementado(FiscalProvider):
         raise NotImplementedError("SefazDiretoProvider.cancelar ainda não está implementado")
 
 
+class FiscalProviderFalsoRejeitando(FiscalProvider):
+    """Fake provider cujo `emitir` sempre devolve "rejeitada" -- usado para
+    testar o caminho de retentativa de uma nota rejeitada em nota.html
+    (Important #5)."""
+
+    def emitir(self, venda):
+        return ResultadoFiscal(
+            referencia=f"venda-{venda.id}", status="rejeitada", mensagem_erro="Rejeicao: Falha no Schema XML"
+        )
+
+    def consultar(self, referencia):
+        raise NotImplementedError
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError
+
+
+class FiscalProviderFalsoComFalhaTransitoriaNaConsulta(FiscalProvider):
+    """Fake provider cujo `consultar` simula uma falha transitória (ex.: erro
+    de rede) -- não sabe a chave de acesso/protocolo da nota, então devolve
+    None para ambos, como `SefazDiretoProvider.consultar` faz em seus ramos
+    de erro. Usado para reproduzir o achado do Important #6: uma falha
+    transitória ao consultar não pode apagar a chave/protocolo reais já
+    persistidos de uma nota já autorizada."""
+
+    def emitir(self, venda):
+        raise NotImplementedError  # não usado neste teste -- emissão via FiscalProviderFalso
+
+    def consultar(self, referencia):
+        return ResultadoFiscal(
+            referencia=referencia,
+            status="rejeitada",
+            mensagem_erro="Falha de comunicação com a Sefaz: timeout",
+        )
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError
+
+
 class FiscalProviderFalsoDuasEtapas(FiscalProvider):
     """Fake provider whose first `emitir` call comes back "processando" and whose
     second comes back "autorizada" — used to exercise the create-then-update path
@@ -126,6 +165,49 @@ def authed_client_com_provider_falso(authed_client, db_session):
     app.dependency_overrides[get_fiscal_provider] = lambda: provider_falso
     yield authed_client, provider_falso
     del app.dependency_overrides[get_fiscal_provider]
+
+
+class FiscalProviderFalsoComNomeProvedor(FiscalProvider):
+    """Fake provider que declara `NOME_PROVEDOR` (mesmo mecanismo exposto por
+    `SefazDiretoProvider.NOME_PROVEDOR`), para testar o wiring de
+    `notas_service.emitir_nota` sem depender do `SefazDiretoProvider` real
+    (que exigiria certificado/CSC/webservice mockados) -- o ponto sob teste
+    é só "o `provedor` da nota é preenchido a partir do atributo do
+    provider", não o `SefazDiretoProvider` em si (já coberto por
+    `tests/test_sefaz_direto_provider.py`)."""
+
+    NOME_PROVEDOR = "sefaz_direto"
+
+    def emitir(self, venda):
+        return ResultadoFiscal(referencia=f"venda-{venda.id}", status="autorizada", numero="1", serie="1")
+
+    def consultar(self, referencia):
+        raise NotImplementedError
+
+    def cancelar(self, referencia, motivo):
+        raise NotImplementedError
+
+
+def test_emitir_nota_marca_provedor_a_partir_do_nome_provedor_do_provider(
+    authed_client_com_provider_falso, venda_paga, db_session
+):
+    """Bundle item da revisão final do branch: `NotaFiscal.provedor` tem
+    default "focus_nfe" no model e `_aplicar_resultado` nunca o alterava --
+    notas emitidas pela integração direta com a Sefaz ficavam mal rotuladas
+    no banco. Confirma que `emitir_nota` grava `provedor` a partir do
+    atributo `NOME_PROVEDOR` do provider ativo quando ele existe, e mantém o
+    default para providers que não o declaram (ex.: `FiscalProviderFalso`,
+    usado nos demais testes deste arquivo)."""
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+    nota = db_session.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_paga.id).first()
+    assert nota.provedor == "focus_nfe"  # default do model, provider fake não declara NOME_PROVEDOR
+
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoComNomeProvedor()
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    db_session.refresh(nota)
+    assert nota.provedor == "sefaz_direto"
 
 
 def test_emitir_nota_grava_dados_retornados_pelo_provedor(authed_client_com_provider_falso, venda_paga):
@@ -276,6 +358,56 @@ def test_ver_danfe_sem_nota_autorizada_retorna_404(authed_client_com_provider_fa
     response = client.get(f"/vendas/{venda_paga.id}/nota/danfe")
 
     assert response.status_code == 404
+
+
+def test_pagina_da_nota_rejeitada_mostra_formulario_de_retentativa_e_mensagem_de_erro(
+    authed_client_com_provider_falso, venda_paga
+):
+    """Important #5 da revisão final do branch: `nota.html` só mostrava o
+    formulário/botão de emissão quando `nota is none` -- uma nota já com
+    status "rejeitada" ficava sem NENHUM caminho de UI para tentar de novo
+    (o botão "Atualizar status" chama `consultar`, que precisa de uma
+    `chave_acesso` que uma nota rejeitada nunca teve). Confirma que a página
+    agora mostra o formulário de emissão (retentativa) e a mensagem de erro
+    da tentativa anterior quando a nota está rejeitada."""
+    client, _ = authed_client_com_provider_falso
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoRejeitando()
+
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+    pagina = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert pagina.status_code == 200
+    assert "rejeitada" in pagina.text
+    assert "Falha no Schema" in pagina.text  # mensagem_erro da tentativa anterior, visível para quem for retentar
+    assert f'/vendas/{venda_paga.id}/nota/emitir' in pagina.text  # formulário de retentativa presente
+
+
+def test_consultar_nota_com_falha_transitoria_preserva_chave_e_protocolo_ja_persistidos(
+    authed_client_com_provider_falso, venda_paga, db_session
+):
+    """Important #6 da revisão final do branch: `_aplicar_resultado` (em
+    `notas_service.py`) sobrescrevia incondicionalmente `chave_acesso`/
+    `protocolo` com o que o `ResultadoFiscal` trouxesse -- inclusive `None`
+    nos ramos de erro de `SefazDiretoProvider.consultar`. Uma falha
+    transitória (ex.: blip de rede) ao consultar uma nota JÁ autorizada
+    apagava permanentemente a chave/protocolo reais dela. Confirma que isso
+    não acontece mais: só `status`/`mensagem_erro` refletem a falha."""
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    nota = db_session.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_paga.id).first()
+    assert nota.chave_acesso == "1" * 44
+    assert nota.protocolo == "abc123"
+
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoComFalhaTransitoriaNaConsulta()
+    response = client.post(f"/vendas/{venda_paga.id}/nota/consultar", follow_redirects=False)
+    assert response.status_code == 303
+
+    db_session.refresh(nota)
+    assert nota.chave_acesso == "1" * 44  # preservado, não apagado
+    assert nota.protocolo == "abc123"  # preservado, não apagado
+    assert nota.status.value == "rejeitada"  # status reflete a falha mais recente, nunca "pendente" silenciosamente
+    assert nota.mensagem_erro
 
 
 def test_emitir_nota_duas_vezes_atualiza_registro_existente_em_vez_de_duplicar(

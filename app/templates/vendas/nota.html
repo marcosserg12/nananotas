@@ -27,8 +27,16 @@
 </table>
 {% endif %}
 
+{% if nota is none or nota.status.value == "rejeitada" %}
 {% if nota is none %}
 <p class="mb-4">Nenhuma nota fiscal emitida para esta venda ainda.</p>
+{% else %}
+<p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
+{% if nota.mensagem_erro %}
+<p class="text-red-600 mb-2">{{ nota.mensagem_erro }}</p>
+{% endif %}
+<p class="mb-4">A última tentativa de emissão foi rejeitada. Corrija o que for necessário e tente novamente abaixo.</p>
+{% endif %}
 
 {% if venda.status.value == "pago" %}
 <div class="bg-white p-4 rounded shadow mb-4">
@@ -68,7 +76,7 @@
 </div>
 
 <details class="mb-4">
-    <summary class="cursor-pointer text-slate-600 underline">Ou emitir automaticamente por um provedor pago (Focus NFe)</summary>
+    <summary class="cursor-pointer text-slate-600 underline">Ou emitir por um provedor pago (Focus NFe), caso a integração direta não funcione</summary>
     <form method="post" action="/vendas/{{ venda.id }}/nota/emitir" class="mt-2">
         <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
     </form>
@@ -78,6 +86,8 @@
 {% endif %}
 
 {% else %}
+{# nota existe e o status NÃO é "rejeitada" (esse caso é tratado no bloco de retry acima) --
+   normalmente "autorizada"/"cancelada"/"processando". #}
 <p class="mb-2">Status: <strong>{{ nota.status.value }}</strong></p>
 {% if nota.mensagem_erro %}
 <p class="text-red-600 mb-2">{{ nota.mensagem_erro }}</p>

@@ -19,6 +19,16 @@ def emitir_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFis
         nota = NotaFiscal(venda_id=venda_id, referencia=resultado.referencia)
         db.add(nota)
 
+    # Rotula a nota com o provedor que de fato a emitiu -- sem isso, toda
+    # nota fica marcada com o default do model ("focus_nfe"), mesmo quando
+    # emitida pela integração direta com a Sefaz (bundle item da revisão
+    # final do branch). `NOME_PROVEDOR` é opcional por design (um
+    # `FiscalProvider` de teste/fake não precisa declará-lo), então isso não
+    # sobrescreve `nota.provedor` quando o provider ativo não o expõe.
+    nome_provedor = getattr(provider, "NOME_PROVEDOR", None)
+    if nome_provedor:
+        nota.provedor = nome_provedor
+
     _aplicar_resultado(nota, resultado)
     db.commit()
     db.refresh(nota)
@@ -81,10 +91,25 @@ def cancelar_nota(db: Session, venda_id: int, motivo: str, provider: FiscalProvi
 def _aplicar_resultado(nota: NotaFiscal, resultado) -> None:
     nota.referencia = resultado.referencia
     nota.status = StatusNota(resultado.status)
-    nota.numero = resultado.numero
-    nota.serie = resultado.serie
-    nota.chave_acesso = resultado.chave_acesso
-    nota.protocolo = resultado.protocolo
+    # `numero`/`serie`/`chave_acesso`/`protocolo`: só sobrescreve quando o
+    # novo valor é "truthy" -- preserva o valor já persistido quando o
+    # `provider` devolve None para eles (ex.: `SefazDiretoProvider.consultar`
+    # numa falha/erro transitório de rede não tem como saber esses valores,
+    # então devolve None -- ver `ResultadoFiscal` nesses ramos). Sem isso, uma
+    # falha transiente ao CONSULTAR uma nota já autorizada apagava
+    # permanentemente a chave de acesso/protocolo reais dela (quebrando,
+    # inclusive, a rota do DANFE, que depende de `chave_acesso`) -- Important
+    # #6 da revisão final do branch.
+    #
+    # `status`/`mensagem_erro` continuam sendo sempre sobrescritos pelo
+    # resultado mais recente, mesmo em falha -- é exatamente o ponto de
+    # "nunca deixar silenciosamente como pendente" (ver constraint global do
+    # plano): o status precisa refletir a última tentativa, mesmo quando ela
+    # falhou.
+    nota.numero = resultado.numero or nota.numero
+    nota.serie = resultado.serie or nota.serie
+    nota.chave_acesso = resultado.chave_acesso or nota.chave_acesso
+    nota.protocolo = resultado.protocolo or nota.protocolo
     nota.url_danfe = resultado.url_danfe
     nota.url_xml = resultado.url_xml
     nota.mensagem_erro = resultado.mensagem_erro
