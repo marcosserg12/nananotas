@@ -82,14 +82,27 @@ _NAMESPACE_RECEPCAO_EVENTO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepca
 _OPERACAO_RECEPCAO_EVENTO = "nfeRecepcaoEvento"
 
 # Diferente dos namespaces/operações acima (corroborados só por pesquisa
-# secundária -- ver nota no topo do módulo), estes dois foram confirmados
-# nesta task (Task 8) lendo o WSDL de verdade que já vem empacotado junto
-# com a `nfelib` instalada neste ambiente
-# (`site-packages/nfelib/nfe/wsdl/v4_0/nfeinutilizacao4.wsdl`): namespace
-# `NFeInutilizacao4`, operação `nfeInutilizacaoNF`, e o endereço de produção
-# do próprio WSDL bate exatamente com o já usado em `ENDPOINTS["producao"]
-# ["inutilizacao"]` abaixo -- evidência adicional de que aquele dicionário
-# (montado por pesquisa secundária na Task 5) está correto.
+# secundária -- ver nota no topo do módulo), namespace e operação abaixo
+# foram confirmados nesta task (Task 8) lendo o WSDL de verdade que já vem
+# empacotado junto com a `nfelib` instalada neste ambiente
+# (`site-packages/nfelib/nfe/wsdl/v4_0/nfeinutilizacao4.wsdl`):
+# `NFeInutilizacao4` / `nfeInutilizacaoNF` batem com o que já estava em uso.
+#
+# O que esse WSDL NÃO confirma: o hostname de produção usado em
+# `ENDPOINTS["producao"]["inutilizacao"]` abaixo. Esse WSDL empacotado é da
+# infraestrutura genérica de NF-e (modelo 55) do SVRS -- seu
+# `soap:address`/`soap12:address` aponta para
+# `https://nfe.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx`
+# (subdomínio `nfe`), enquanto `ENDPOINTS["producao"]["inutilizacao"]` usa
+# `https://nfce.svrs.rs.gov.br/...` (subdomínio `nfce`, específico de
+# NFC-e/modelo 65, o mesmo padrão dos demais endpoints deste dicionário).
+# Cruzado com `nfelib.nfe.client.v4_0.servers` nesta task: confirma que o
+# WSDL empacotado é mesmo o genérico de NF-e, não um WSDL NFC-e-específico
+# -- ou seja, ele NÃO corrobora o hostname usado abaixo. Esse hostname
+# continua não verificado contra uma fonte ao vivo, a mesma ressalva já
+# registrada para `autorizar`/`consultar_protocolo` na Task 5: exige teste
+# de fumaça real em homologação antes de qualquer uso em produção (ver
+# docstring no topo do módulo).
 _NAMESPACE_INUTILIZACAO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeInutilizacao4"
 _OPERACAO_INUTILIZACAO = "nfeInutilizacaoNF"
 
