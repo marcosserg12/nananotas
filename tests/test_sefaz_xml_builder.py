@@ -30,6 +30,8 @@ def emitente_configurado(monkeypatch):
     monkeypatch.setattr(settings, "emitente_endereco_uf", "DF")
     monkeypatch.setattr(settings, "emitente_endereco_cep", "70719040")
     monkeypatch.setattr(settings, "sefaz_ambiente", "homologacao")
+    monkeypatch.setattr(settings, "sefaz_csc_id", "1")
+    monkeypatch.setattr(settings, "sefaz_csc_token", "ABCDEF0123456789ABCDEF0123456789")
     return settings
 
 
@@ -166,10 +168,13 @@ def test_montar_nfce_xml_e_estruturalmente_valido_pelo_schema_da_nfelib(db_sessi
     Task 1) para validar a saída contra o XSD oficial da NFe/NFC-e v4.00.
 
     O único erro esperado nesta etapa do pipeline é a ausência de
-    `infNFeSupl`/`Signature` no elemento raiz `<NFe>` -- ambos são
-    adicionados por etapas posteriores (Task 4: assinatura; Task 7: QR
-    code), não por esta função. Qualquer OUTRO erro de schema indicaria um
-    problema real na construção de ide/emit/dest/det/imposto/total/pag."""
+    `Signature` no elemento raiz `<NFe>` -- adicionada por uma etapa
+    posterior (Task 4: assinatura), não por esta função. `infNFeSupl` NÃO
+    entra mais nesse filtro (correção da revisão final do branch: este
+    grupo obrigatório agora é preenchido por `montar_nfce_xml` -- ver
+    `test_montar_nfce_xml_inclui_infnfesupl_com_qrcode_obrigatorio` abaixo).
+    Qualquer OUTRO erro de schema indicaria um problema real na construção
+    de ide/emit/dest/det/imposto/total/pag/infNFeSupl."""
     from nfelib.nfe.bindings.v4_0 import Nfe
 
     venda = _venda_com_item(db_session)
@@ -177,8 +182,37 @@ def test_montar_nfce_xml_e_estruturalmente_valido_pelo_schema_da_nfelib(db_sessi
 
     erros = Nfe.schema_validation(xml_texto)
 
-    outros_erros = [e for e in erros if "infNFeSupl" not in e and "Signature" not in e]
+    outros_erros = [e for e in erros if "Signature" not in e]
     assert outros_erros == [], f"erros de schema inesperados: {outros_erros}"
+
+
+def test_montar_nfce_xml_inclui_infnfesupl_com_qrcode_obrigatorio(db_session):
+    """Critical #1 da revisão final do branch: `infNFeSupl`/`qrCode` é
+    obrigatório em NFC-e (a razão de existir do CSC) e antes não era
+    preenchido -- toda submissão real ficava sem esse grupo. Confirma que
+    `montar_nfce_xml` agora monta `infNFeSupl` com uma URL de QR Code
+    não-vazia contendo a chave de acesso, e `urlChave` preenchido."""
+    venda = _venda_com_item(db_session)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    inf_nfe_supl = raiz.find(".//nfe:infNFeSupl", NS)
+    assert inf_nfe_supl is not None
+
+    qrcode_el = inf_nfe_supl.find("nfe:qrCode", NS)
+    assert qrcode_el is not None
+    assert qrcode_el.text
+    assert qrcode_el.text.startswith("http")
+    assert "p=" in qrcode_el.text
+
+    inf_nfe = raiz.find(".//nfe:infNFe", NS)
+    chave = inf_nfe.attrib["Id"].replace("NFe", "")
+    assert chave in qrcode_el.text
+
+    url_chave_el = inf_nfe_supl.find("nfe:urlChave", NS)
+    assert url_chave_el is not None
+    assert url_chave_el.text
 
 
 def test_montar_nfce_xml_levanta_erro_claro_se_emitente_incompleto(db_session, monkeypatch):
@@ -214,6 +248,43 @@ def test_montar_nfce_xml_endereco_sem_numero_nao_e_tratado_como_faltante(db_sess
     raiz = ElementTree.fromstring(xml_texto)
     nro = raiz.find(".//nfe:emit/nfe:enderEmit/nfe:nro", NS)
     assert nro.text == "SN"
+
+
+def test_montar_nfce_xml_vpag_e_vnf_concordam_mesmo_com_valor_total_divergente(db_session):
+    """Important #7 da revisão final do branch: `_montar_pag` antes usava
+    `venda.valor_total` diretamente para `vPag` -- calculado por
+    `vendas_service.recalcular_total` somando `quantidade * preco_unitario`
+    SEM quantizar por item antes de gravar (colunas `Numeric(10,2)`, mas o
+    produto pode carregar até 4 casas decimais antes de ser arredondado no
+    armazenamento), enquanto `vNF` (em `_montar_total`) soma os `vProd` já
+    quantizados por item -- os dois podiam divergir em um centavo, e Sefaz
+    rejeita quando a soma de `vPag` não bate com `vNF`.
+
+    Prova o fix corrompendo deliberadamente `venda.valor_total` em memória
+    (simulando exatamente esse tipo de divergência de um centavo que
+    `recalcular_total` podia produzir) e confirmando que `vPag` e `vNF` do
+    XML gerado CONTINUAM idênticos, e iguais ao valor correto (soma dos
+    `vProd` por item) -- porque `_montar_pag` não lê mais `venda.valor_total`
+    de jeito nenhum, e sim o mesmo `Decimal` já quantizado que
+    `_montar_total` usa. Os dois concordam por construção, não porque
+    `venda.valor_total` calhou de estar certo."""
+    venda = _venda_com_item(db_session)  # 2 unidades a 15.00 = 30.00 (vProd corretamente quantizado)
+    assert venda.valor_total == Decimal("30.00")
+
+    # Divergência deliberada de 1 centavo -- o tipo de valor "quase certo"
+    # que o cálculo naive (sem quantizar por item) de recalcular_total podia
+    # produzir em memória antes de um reload.
+    venda.valor_total = Decimal("30.01")
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    v_nf = raiz.find(".//nfe:total/nfe:ICMSTot/nfe:vNF", NS).text
+    v_pag = raiz.find(".//nfe:pag/nfe:detPag/nfe:vPag", NS).text
+
+    assert v_nf == "30.00"  # correto: soma dos vProd por item, ignora o valor_total corrompido
+    assert v_pag == "30.00"
+    assert v_pag == v_nf
 
 
 def test_montar_nfce_xml_chave_de_acesso_tem_44_digitos_e_dv_correto(db_session):

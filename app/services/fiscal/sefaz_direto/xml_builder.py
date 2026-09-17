@@ -9,6 +9,16 @@ abaixo foi inventado; cada um foi confirmado via
 `python -c "from nfelib... import ...; import dataclasses; ..."` neste mesmo
 ambiente antes de ser usado.
 
+CORREÇÃO (revisão final do branch) -- `infNFeSupl`/`qrCode`: este módulo
+antes deixava de preencher `Tnfe.InfNfeSupl`, um grupo obrigatório para
+NFC-e (a razão de existir do CSC). O texto abaixo dizia que isso tinha sido
+"deferred to Task 7", mas a Task 7 só renderizou o QR Code no HTML local do
+DANFE (`qrcode_builder.gerar_imagem_qrcode_base64`), nunca escreveu
+`infNFeSupl` no XML de verdade. Corrigido: `montar_nfce_xml` agora monta
+`infNFeSupl` via `_montar_inf_nfe_supl`, reusando
+`qrcode_builder.montar_url_qrcode` (mesma função da Task 7) -- ver essa
+função e `montar_nfce_xml` abaixo.
+
 PENDÊNCIA EM ABERTO -- IBS/CBS (reforma tributária, obrigatório desde
 2026-08-03): a versão instalada da `nfelib` modela os campos de IBS/CBS
 (`Imposto.IBSCBS: Optional[TtribNfe]`, `Total.IBSCBSTot`), mas o XSD marca
@@ -52,6 +62,7 @@ from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, Tmod, TcodUfIbge, 
 from app.config import settings
 from app.models.venda import Venda
 from app.services.fiscal.focus_nfe import FORMAS_PAGAMENTO_CODIGOS
+from app.services.fiscal.sefaz_direto import qrcode_builder
 
 CFOP_VENDA_DENTRO_DO_ESTADO = "5102"
 NATUREZA_OPERACAO = "Venda de mercadoria"
@@ -89,6 +100,16 @@ _CAMPOS_EMITENTE_OBRIGATORIOS = {
     "EMITENTE_ENDERECO_CEP": "emitente_endereco_cep",
 }
 
+# CSC (Código de Segurança do Contribuinte) -- necessário para montar o hash
+# de segurança do QR Code (`infNFeSupl.qrCode`, grupo obrigatório em NFC-e,
+# ver `_montar_inf_nfe_supl` abaixo). Validado separadamente dos campos do
+# emitente porque é uma credencial distinta (por CSC, não por CNPJ) e para
+# que a mensagem de erro aponte exatamente para o que falta configurar.
+_CAMPOS_CSC_OBRIGATORIOS = {
+    "SEFAZ_CSC_ID": "sefaz_csc_id",
+    "SEFAZ_CSC_TOKEN": "sefaz_csc_token",
+}
+
 
 def _validar_emitente_configurado() -> None:
     """Falha rápido com um ValueError claro se algum dado obrigatório do
@@ -108,6 +129,23 @@ def _validar_emitente_configurado() -> None:
         raise ValueError(
             "Dados do emitente incompletos no .env: "
             f"{', '.join(faltando)}. Preencha esses valores antes de emitir NFC-e."
+        )
+
+
+def _validar_csc_configurado() -> None:
+    """Mesma lógica de `_validar_emitente_configurado`, aplicada ao CSC: sem
+    `SEFAZ_CSC_ID`/`SEFAZ_CSC_TOKEN`, o QR Code montado teria um cIdToken
+    vazio e um hash de segurança calculado sobre um token vazio -- um
+    `infNFeSupl.qrCode` bem-formado mas inútil (e, no caso de cIdToken
+    vazio, inválido pelo próprio pattern do schema), não um erro claro."""
+    faltando = [
+        chave_env for chave_env, atributo in _CAMPOS_CSC_OBRIGATORIOS.items() if not getattr(settings, atributo)
+    ]
+    if faltando:
+        raise ValueError(
+            "Configuração do CSC (Código de Segurança do Contribuinte) incompleta no .env: "
+            f"{', '.join(faltando)}. Necessária para montar o grupo obrigatório "
+            "infNFeSupl/qrCode antes de emitir NFC-e."
         )
 
 
@@ -317,23 +355,51 @@ def _montar_total(valor_produtos: Decimal) -> "Tnfe.InfNfe.Total":
     return Tnfe.InfNfe.Total(ICMSTot=icms_tot)
 
 
-def _montar_pag(venda: Venda) -> "Tnfe.InfNfe.Pag":
+def _montar_inf_nfe_supl(chave: str) -> "Tnfe.InfNfeSupl":
+    """Monta o grupo `infNFeSupl` (`qrCode` + `urlChave`) -- obrigatório em
+    NFC-e (modelo 65), corrigido nesta task (ver docstring do módulo).
+    Reusa `qrcode_builder.montar_url_qrcode` (a mesma função já usada pela
+    rota do DANFE local, Task 7) em vez de duplicar a lógica de hash do CSC.
+    Campos confirmados via `dataclasses.fields(Tnfe.InfNfeSupl)` nesta
+    ambiente: ambos `str`, obrigatórios, com pattern próprio no XSD."""
+    url_qrcode = qrcode_builder.montar_url_qrcode(
+        chave, settings.sefaz_ambiente, settings.sefaz_csc_id, settings.sefaz_csc_token
+    )
+    return Tnfe.InfNfeSupl(qrCode=url_qrcode, urlChave=qrcode_builder.montar_url_consulta_chave())
+
+
+def _montar_pag(venda: Venda, valor_produtos: Decimal) -> "Tnfe.InfNfe.Pag":
+    """`valor_produtos` precisa ser o MESMO valor (já somado a partir dos
+    `vProd` quantizados por item) usado em `_montar_total` para `vNF` --
+    nunca `venda.valor_total` diretamente. `vendas_service.recalcular_total`
+    soma `quantidade * preco_unitario` sem quantizar antes de gravar
+    (colunas `Numeric(10,2)`, mas o `Decimal` em memória antes de um reload
+    pode carregar até 4 casas decimais); usar `venda.valor_total` aqui podia
+    fazer `vPag` (pagamento) divergir de `vNF` (total dos produtos) em um
+    centavo -- exatamente o tipo de inconsistência que a Sefaz rejeita.
+    Recebendo o mesmo `Decimal` já quantizado que `_montar_total` usa, os
+    dois grupos concordam por construção, não por coincidência (Important
+    #7 da revisão final do branch)."""
     codigo = FORMAS_PAGAMENTO_CODIGOS.get(venda.forma_pagamento, "99")
-    det_pag = Tnfe.InfNfe.Pag.DetPag(tPag=codigo, vPag=str(venda.valor_total))
+    valor = str(valor_produtos.quantize(DUAS_CASAS, rounding=ROUND_HALF_UP))
+    det_pag = Tnfe.InfNfe.Pag.DetPag(tPag=codigo, vPag=valor)
     return Tnfe.InfNfe.Pag(detPag=[det_pag])
 
 
 def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     """Monta o XML (não assinado) da NFC-e a partir de uma `Venda` paga.
 
-    Não inclui `Signature` (Task 4) nem `infNFeSupl`/QR code (Task 7) --
-    ambos são adicionados por etapas posteriores do pipeline de emissão. Por
-    isso, `Nfe.schema_validation()` sobre a saída desta função aponta
-    exatamente um erro esperado: falta `infNFeSupl` ou `Signature` no
-    elemento raiz `<NFe>`. Isso foi confirmado manualmente nesta task e não
-    é um defeito de construção -- ver o relatório da task.
+    Inclui `infNFeSupl` (`qrCode`/`urlChave`) -- grupo obrigatório em NFC-e,
+    preenchido nesta correção (antes só era renderizado no DANFE HTML local
+    pela Task 7, nunca no próprio XML enviado à Sefaz). Não inclui
+    `Signature` (Task 4), adicionada por uma etapa posterior do pipeline de
+    emissão. Por isso, `Nfe.schema_validation()` sobre a saída desta função
+    aponta exatamente um erro esperado: falta `Signature` no elemento raiz
+    `<NFe>`. Isso foi confirmado manualmente nesta task e não é um defeito
+    de construção -- ver o relatório da task.
     """
     _validar_emitente_configurado()
+    _validar_csc_configurado()
 
     cnf = _gerar_codigo_numerico_aleatorio()
     chave = _montar_chave_acesso(numero, serie, cnf, tp_emis="1", venda=venda)
@@ -353,10 +419,10 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
         det=itens_det,
         total=_montar_total(valor_produtos),
         transp=Tnfe.InfNfe.Transp(modFrete=TranspModFrete.VALUE_9),  # sem transporte
-        pag=_montar_pag(venda),
+        pag=_montar_pag(venda, valor_produtos),
         versao=VERSAO_LEIAUTE,
         Id=f"NFe{chave}",
     )
 
-    nfe = Nfe(infNFe=inf_nfe)
+    nfe = Nfe(infNFe=inf_nfe, infNFeSupl=_montar_inf_nfe_supl(chave))
     return nfe.to_xml()
