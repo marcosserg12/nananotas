@@ -102,7 +102,6 @@ from erpbrasil.assinatura.excecoes import (
 )
 
 NFE_NAMESPACE = "http://www.portalfiscal.inf.br/nfe"
-_INF_NFE_TAG = f"{{{NFE_NAMESPACE}}}infNFe"
 
 _C14N_ALGORITHM = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
 
@@ -115,14 +114,6 @@ def _localizar_elemento(root: "etree._Element", tag_completa: str) -> "etree._El
     if root.tag == tag_completa:
         return root
     return root.find(f".//{tag_completa}")
-
-
-def _localizar_inf_nfe(root: "etree._Element") -> "etree._Element | None":
-    """Localiza o elemento `infNFe` a ser assinado. Mantida como wrapper
-    fino sobre `_localizar_elemento` só por compatibilidade de nome com o
-    que já existia; `assinar_xml` abaixo generaliza para outros elementos
-    via o parâmetro `nome_elemento`."""
-    return _localizar_elemento(root, _INF_NFE_TAG)
 
 
 def assinar_xml(
