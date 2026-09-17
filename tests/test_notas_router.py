@@ -219,6 +219,24 @@ def test_marcar_nota_emitida_manualmente_em_venda_nao_paga_retorna_400(authed_cl
     assert response.status_code == 400
 
 
+def test_ver_danfe_com_nota_autorizada_mostra_qrcode(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota/danfe")
+
+    assert response.status_code == 200
+    assert "data:image/png;base64," in response.text
+
+
+def test_ver_danfe_sem_nota_autorizada_retorna_404(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota/danfe")
+
+    assert response.status_code == 404
+
+
 def test_emitir_nota_duas_vezes_atualiza_registro_existente_em_vez_de_duplicar(
     authed_client_com_provider_falso, venda_paga, db_session
 ):

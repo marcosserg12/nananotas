@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_fiscal_provider
 from app.models.nota_fiscal import NotaFiscal
@@ -12,6 +13,7 @@ from app.models.usuario import Usuario
 from app.models.venda import Venda
 from app.services import notas_service
 from app.services.fiscal.base import FiscalProvider
+from app.services.fiscal.sefaz_direto import qrcode_builder
 
 router = APIRouter(prefix="/vendas")
 templates = Jinja2Templates(directory="app/templates")
@@ -67,6 +69,22 @@ def consultar(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
+
+
+@router.get("/{venda_id}/nota/danfe", response_class=HTMLResponse)
+def ver_danfe(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    venda = db.get(Venda, venda_id)
+    nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
+    if nota is None or not nota.chave_acesso:
+        raise HTTPException(status_code=404, detail="Nota fiscal ainda não autorizada")
+
+    url_qrcode = qrcode_builder.montar_url_qrcode(
+        nota.chave_acesso, settings.sefaz_ambiente, settings.sefaz_csc_id, settings.sefaz_csc_token
+    )
+    qrcode_imagem = qrcode_builder.gerar_imagem_qrcode_base64(url_qrcode)
+    return templates.TemplateResponse(
+        "vendas/danfe.html", {"request": request, "venda": venda, "nota": nota, "qrcode_imagem": qrcode_imagem}
+    )
 
 
 @router.post("/{venda_id}/nota/cancelar")
