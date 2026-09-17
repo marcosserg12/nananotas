@@ -1,3 +1,5 @@
+from urllib.parse import quote_plus
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,10 +33,13 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return (
-            f"mysql+pymysql://{self.db_username}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_database}"
-        )
+        # Usuário/senha são escapados (quote_plus) porque podem conter
+        # caracteres especiais de URL (@, #, %, etc.) -- sem isso, uma senha
+        # com "@" no meio, por exemplo, é lida como se fizesse parte do
+        # endereço do servidor, quebrando a conexão de forma confusa.
+        usuario = quote_plus(self.db_username)
+        senha = quote_plus(self.db_password)
+        return f"mysql+pymysql://{usuario}:{senha}@{self.db_host}:{self.db_port}/{self.db_database}"
 
 
 settings = Settings()
