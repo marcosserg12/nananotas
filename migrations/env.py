@@ -8,7 +8,12 @@ from app.config import settings
 from app.database import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# `%` dobrado (`%%`) porque o `Config` do Alembic guarda essa opção num
+# `configparser`, que trata `%` como início de uma interpolação -- uma URL
+# com senha url-encoded (que pode conter `%XX`) quebra `set_main_option`
+# sem esse escape. O `configparser` desfaz o `%%` de volta para `%` ao ler
+# o valor de novo, então a URL final usada pra conectar fica correta.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
