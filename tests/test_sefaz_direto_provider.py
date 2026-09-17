@@ -133,6 +133,29 @@ def test_emitir_com_erro_de_rede_retorna_rejeitada_em_vez_de_lancar(db_session):
     assert "conexão" in resultado.mensagem_erro.lower() or "conex" in resultado.mensagem_erro.lower()
 
 
+def test_emitir_com_ambiente_invalido_levantando_keyerror_no_webservice_retorna_rejeitada(db_session):
+    """`webservice_client.autorizar` faz `ENDPOINTS[ambiente][...]` sem
+    validar `ambiente` -- um `SEFAZ_AMBIENTE` mal configurado (typo, valor
+    fora de {"homologacao", "producao"}) faz isso levantar `KeyError`. Antes
+    da correção deste teste, essa chamada ficava FORA do try/except de
+    `emitir`, então o `KeyError` vazava cru para fora do provider,
+    quebrando o contrato "nunca lança, sempre devolve ResultadoFiscal
+    rejeitada"."""
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", return_value="<xml-assinado/>"), \
+         patch(
+             "app.services.fiscal.sefaz_direto.provider.webservice_client.autorizar",
+             side_effect=KeyError("ambiente-invalido"),
+         ):
+        resultado = provider.emitir(venda)
+
+    assert resultado.status == "rejeitada"
+    assert resultado.status != "processando"
+    assert resultado.mensagem_erro
+
+
 def _nota_autorizada(db_session, venda, chave_acesso="5" * 44, protocolo="153260000000015"):
     nota = NotaFiscal(
         venda_id=venda.id,
@@ -198,6 +221,26 @@ def test_consultar_com_erro_ou_nao_encontrado_retorna_rejeitada_nunca_processand
             "chave_acesso": None,
             "mensagem": "Consulta com dois digitos -- NF-e não consta na base de dados da SEFAZ",
         }
+        resultado = provider.consultar(nota.referencia)
+
+    assert resultado.status == "rejeitada"
+    assert resultado.status != "processando"
+    assert resultado.mensagem_erro
+
+
+def test_consultar_com_ambiente_invalido_levantando_keyerror_no_webservice_retorna_rejeitada(db_session):
+    """Mesmo caso do `emitir` acima, para `consultar`: `webservice_client.
+    consultar_protocolo` também faz `ENDPOINTS[ambiente][...]` sem validar
+    `ambiente`, e antes da correção esse `KeyError` vazava cru para fora de
+    `consultar` em vez de virar um `ResultadoFiscal` rejeitada."""
+    venda = _venda_com_item(db_session)
+    nota = _nota_autorizada(db_session, venda)
+    provider = SefazDiretoProvider(certificado_path="x", certificado_senha="y")
+
+    with patch(
+        "app.services.fiscal.sefaz_direto.provider.webservice_client.consultar_protocolo",
+        side_effect=KeyError("ambiente-invalido"),
+    ):
         resultado = provider.consultar(nota.referencia)
 
     assert resultado.status == "rejeitada"

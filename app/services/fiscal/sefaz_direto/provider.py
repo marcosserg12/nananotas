@@ -80,10 +80,9 @@ class SefazDiretoProvider(FiscalProvider):
 
             xml_sem_assinar = xml_builder.montar_nfce_xml(venda, numero=numero, serie=1)
             xml_assinado = assinatura.assinar_xml(xml_sem_assinar, self.certificado_path, self.certificado_senha)
+            resultado_ws = webservice_client.autorizar(xml_assinado, ambiente=self.ambiente)
         except Exception as exc:
             return ResultadoFiscal(referencia=referencia, status="rejeitada", mensagem_erro=str(exc))
-
-        resultado_ws = webservice_client.autorizar(xml_assinado, ambiente=self.ambiente)
 
         if resultado_ws["status"] == "autorizado":
             return ResultadoFiscal(
@@ -103,10 +102,9 @@ class SefazDiretoProvider(FiscalProvider):
     def consultar(self, referencia: str) -> ResultadoFiscal:
         try:
             nota = _buscar_nota_por_referencia(referencia)
+            resultado_ws = webservice_client.consultar_protocolo(nota.chave_acesso, ambiente=self.ambiente)
         except Exception as exc:
             return ResultadoFiscal(referencia=referencia, status="rejeitada", mensagem_erro=str(exc))
-
-        resultado_ws = webservice_client.consultar_protocolo(nota.chave_acesso, ambiente=self.ambiente)
 
         status = _STATUS_CONSULTA_PARA_RESULTADO.get(resultado_ws["status"])
         if status is None:
