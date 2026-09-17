@@ -47,3 +47,19 @@ def test_primeira_chamada_cria_registro_com_insert_then_lock(db_session):
     # Verify the next call increments correctly (showing the insert path didn't break locking)
     numero2 = numeracao.reservar_proximo_numero(db_session, serie=99)
     assert numero2 == 2
+
+
+def test_registrar_falha_apos_reserva_aparece_em_numeros_pendentes(db_session):
+    numero = numeracao.reservar_proximo_numero(db_session, serie=1)
+
+    numeracao.registrar_falha_apos_reserva(db_session, serie=1, numero=numero)
+
+    assert numero in numeracao.numeros_reservados_nao_emitidos(db_session, serie=1)
+
+
+def test_numero_emitido_com_sucesso_nao_aparece_em_pendentes(db_session):
+    numero = numeracao.reservar_proximo_numero(db_session, serie=1)
+
+    pendentes = numeracao.numeros_reservados_nao_emitidos(db_session, serie=1)
+
+    assert numero not in pendentes

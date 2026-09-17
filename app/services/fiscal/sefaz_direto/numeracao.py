@@ -30,5 +30,31 @@ def reservar_proximo_numero(db: Session, serie: int = 1) -> int:
     return contador.ultimo_numero
 
 
+def registrar_falha_apos_reserva(db: Session, serie: int, numero: int) -> None:
+    """Marca `numero` (já reservado por `reservar_proximo_numero`) como
+    pendente de inutilização -- usado quando a emissão falhou depois que o
+    número já havia sido reservado (falha de assinatura, erro de rede antes
+    da resposta da Sefaz, etc.), deixando um "buraco" na numeração que
+    precisa ser formalmente inutilizado junto à Sefaz."""
+    contador = db.query(NumeracaoNFCe).filter(NumeracaoNFCe.serie == serie).first()
+    if contador is None:
+        raise ValueError(f"Série {serie} não encontrada")
+    pendentes = _parse_pendentes(contador.numeros_pendentes_inutilizacao)
+    pendentes.add(numero)
+    contador.numeros_pendentes_inutilizacao = ",".join(str(n) for n in sorted(pendentes))
+    db.commit()
+
+
 def numeros_reservados_nao_emitidos(db: Session, serie: int = 1) -> list[int]:
-    return []
+    """Lista os números da série ainda pendentes de inutilização (reservados
+    mas nunca autorizados -- ver `registrar_falha_apos_reserva`)."""
+    contador = db.query(NumeracaoNFCe).filter(NumeracaoNFCe.serie == serie).first()
+    if contador is None:
+        return []
+    return sorted(_parse_pendentes(contador.numeros_pendentes_inutilizacao))
+
+
+def _parse_pendentes(valor: str) -> set[int]:
+    if not valor:
+        return set()
+    return {int(parte) for parte in valor.split(",") if parte}

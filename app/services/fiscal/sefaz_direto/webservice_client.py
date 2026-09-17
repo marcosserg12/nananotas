@@ -43,9 +43,15 @@ SVRS (o SVRS é conhecido por, historicamente, ter pequenas particularidades
 em relação ao contrato "padrão" de outras UFs).
 """
 
+from datetime import datetime
 from xml.etree import ElementTree
 
 import httpx
+from nfelib.nfe.bindings.v4_0 import InfInutXServ, InutNfe
+from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, TcodUfIbge, Tmod
+
+from app.config import settings
+from app.services.fiscal.sefaz_direto import assinatura
 
 ENDPOINTS = {
     "homologacao": {
@@ -75,12 +81,32 @@ _OPERACAO_CONSULTA = "nfeConsultaNF"
 _NAMESPACE_RECEPCAO_EVENTO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"
 _OPERACAO_RECEPCAO_EVENTO = "nfeRecepcaoEvento"
 
+# Diferente dos namespaces/operações acima (corroborados só por pesquisa
+# secundária -- ver nota no topo do módulo), estes dois foram confirmados
+# nesta task (Task 8) lendo o WSDL de verdade que já vem empacotado junto
+# com a `nfelib` instalada neste ambiente
+# (`site-packages/nfelib/nfe/wsdl/v4_0/nfeinutilizacao4.wsdl`): namespace
+# `NFeInutilizacao4`, operação `nfeInutilizacaoNF`, e o endereço de produção
+# do próprio WSDL bate exatamente com o já usado em `ENDPOINTS["producao"]
+# ["inutilizacao"]` abaixo -- evidência adicional de que aquele dicionário
+# (montado por pesquisa secundária na Task 5) está correto.
+_NAMESPACE_INUTILIZACAO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeInutilizacao4"
+_OPERACAO_INUTILIZACAO = "nfeInutilizacaoNF"
+
 _TIMEOUT_PADRAO_SEGUNDOS = 30.0
 
 _CODIGOS_CSTAT_AUTORIZADO = {"100"}
 _CODIGOS_CSTAT_CANCELADO_NA_CONSULTA = {"101", "135", "151"}
 _CODIGOS_CSTAT_NAO_ENCONTRADO = {"217", "218"}
 _CODIGO_CSTAT_EVENTO_REGISTRADO = "135"
+_CODIGO_CSTAT_INUTILIZADO = "102"
+
+# cUF (Distrito Federal) e mod (NFC-e) fixos -- mesmos valores hardcoded em
+# `xml_builder.CUF_EMITENTE`/`Tmod.VALUE_65`, porque este sistema inteiro só
+# emite NFC-e para um único emitente no DF (Nana Lanches), nunca NF-e (mod
+# 55) nem outra UF.
+_CUF_EMITENTE_INUTILIZACAO = TcodUfIbge.VALUE_53
+_MOD_NFCE_INUTILIZACAO = Tmod.VALUE_65
 
 
 def _montar_envelope(xml_dados: str, namespace: str) -> str:
@@ -295,3 +321,130 @@ def cancelar(
         "chave_acesso": chave_acesso,
         "mensagem": mensagem or "Rejeitado pela Sefaz sem motivo informado",
     }
+
+
+def _somente_digitos(valor: str | None) -> str:
+    return "".join(c for c in (valor or "") if c.isdigit())
+
+
+def _montar_id_inutilizacao(cnpj: str, ano: str, serie: int, numero_inicial: int, numero_final: int) -> str:
+    """Monta o atributo `Id` de `infInut` (padrão `ID[0-9]{41}` confirmado
+    via `dataclasses.fields(TinutNfe.InfInut)` nesta task): mesma lógica de
+    concatenação com zero-padding da chave de acesso
+    (`xml_builder._montar_chave_acesso`), só que sem código numérico
+    aleatório nem dígito verificador -- `cUF(2) + ano(2) + CNPJ(14) +
+    mod(2) + serie(3) + nNFIni(9) + nNFFin(9)` = 41 dígitos."""
+    return (
+        "ID"
+        + "53"  # cUF -- Distrito Federal, fixo (ver _CUF_EMITENTE_INUTILIZACAO)
+        + ano
+        + cnpj.zfill(14)
+        + "65"  # mod -- NFC-e, fixo (ver _MOD_NFCE_INUTILIZACAO)
+        + str(serie).zfill(3)
+        + str(numero_inicial).zfill(9)
+        + str(numero_final).zfill(9)
+    )
+
+
+def _montar_inf_inut_xml(serie: int, numero_inicial: int, numero_final: int, justificativa: str, ambiente: str) -> str:
+    """Monta (sem assinar) o XML do pedido de inutilização de numeração --
+    elemento raiz `<inutNFe>`, dados em `infInut` -- usando as classes
+    tipadas da `nfelib` (`InutNfe`/`InutNfe.InfInut`/`InfInutXServ`), no
+    mesmo espírito de `xml_builder.montar_nfce_xml`: nenhum nome de
+    campo/classe abaixo foi inventado, todos foram confirmados nesta task
+    via `dataclasses.fields(InutNfe.InfInut)` contra o pacote de fato
+    instalado neste ambiente. Ao contrário do `infEvento` de cancelamento
+    (Task 6 -- `DetEvento` é um grupo `xs:any` sem tipagem), `infInut` é
+    totalmente tipado na `nfelib`, então não há necessidade de montar XML
+    bruto à mão aqui.
+    """
+    cnpj = _somente_digitos(settings.emitente_cnpj)
+    if not cnpj:
+        raise ValueError(
+            "EMITENTE_CNPJ não configurado no .env -- necessário para montar o pedido de inutilização "
+            "(campo obrigatório CNPJ de infInut)."
+        )
+
+    # "ano" (AA) não tem, hoje, uma origem melhor: os números pendentes de
+    # inutilização (numeracao.numeros_reservados_nao_emitidos) não guardam a
+    # data em que a reserva foi feita, só o número em si. Usar o ano
+    # corrente (momento do pedido de inutilização) é a aproximação usual
+    # para essa situação -- documentado aqui em vez de assumido em
+    # silêncio; se a reserva falha e a inutilização é solicitada num ano
+    # diferente do da reserva, revisar este valor manualmente.
+    ano = datetime.now().strftime("%y")
+    tp_amb = Tamb.VALUE_1 if ambiente == "producao" else Tamb.VALUE_2
+
+    inf_inut = InutNfe.InfInut(
+        tpAmb=tp_amb,
+        xServ=InfInutXServ.INUTILIZAR,
+        cUF=_CUF_EMITENTE_INUTILIZACAO,
+        ano=ano,
+        CNPJ=cnpj,
+        mod=_MOD_NFCE_INUTILIZACAO,
+        serie=str(serie),
+        nNFIni=str(numero_inicial),
+        nNFFin=str(numero_final),
+        xJust=justificativa,
+        Id=_montar_id_inutilizacao(cnpj, ano, serie, numero_inicial, numero_final),
+    )
+    return InutNfe(infInut=inf_inut, versao="4.00").to_xml()
+
+
+def inutilizar(
+    serie: int, numero_inicial: int, numero_final: int, justificativa: str, ambiente: str = "homologacao"
+) -> dict:
+    """Monta, assina e envia o pedido de inutilização de numeração para a
+    faixa [numero_inicial, numero_final] da série informada -- usado para
+    fechar formalmente, junto à Sefaz, um "buraco" na numeração deixado por
+    números reservados (`numeracao.reservar_proximo_numero`) que nunca
+    chegaram a ser emitidos com sucesso (ver `numeracao.
+    registrar_falha_apos_reserva`).
+
+    Ao contrário de `autorizar`/`cancelar` (que recebem XML já assinado,
+    montado por quem chama -- tipicamente `SefazDiretoProvider`), esta
+    função monta e assina o XML sozinha: não há, ainda, um fluxo/provider
+    para inutilização (esta task não inclui um método correspondente em
+    `SefazDiretoProvider` -- não fazia parte do escopo pedido), e as
+    credenciais do certificado A1 (`settings.sefaz_certificado_path`/
+    `.sefaz_certificado_senha`) e o CNPJ do emitente (`settings.
+    emitente_cnpj`) já são configuração global única deste sistema (um
+    emitente só, "Nana Lanches"), então não há razão para exigi-los como
+    parâmetros extras aqui.
+
+    Qualquer falha ao montar/assinar o XML (certificado ausente/senha
+    errada/emitente não configurado) ou ao comunicar com a Sefaz vira
+    `{"status": "erro", "mensagem": ...}` em vez de propagar a exceção --
+    mesmo contrato de "nunca lança, sempre devolve um dict" já usado por
+    `autorizar`/`consultar_protocolo`/`cancelar` acima.
+
+    Retorna um dict com `status` em {"inutilizado", "erro"} e `mensagem`.
+    """
+    try:
+        url = ENDPOINTS[ambiente]["inutilizacao"]
+        xml_sem_assinar = _montar_inf_inut_xml(serie, numero_inicial, numero_final, justificativa, ambiente)
+        xml_assinado = assinatura.assinar_xml(
+            xml_sem_assinar,
+            settings.sefaz_certificado_path,
+            settings.sefaz_certificado_senha,
+            nome_elemento="infInut",
+        )
+    except Exception as exc:
+        return {"status": "erro", "mensagem": str(exc)}
+
+    response, erro = _postar_envelope(url, xml_assinado, _NAMESPACE_INUTILIZACAO, _OPERACAO_INUTILIZACAO)
+    if erro:
+        return {"status": "erro", "mensagem": erro}
+
+    raiz, erro_parse = _parsear_resposta(response.text)
+    if erro_parse:
+        return {"status": "erro", "mensagem": erro_parse}
+
+    inf_inut = _localizar_primeiro(raiz, "infInut")
+    origem = inf_inut if inf_inut is not None else raiz
+    cstat = _texto(origem, "cStat")
+    mensagem = _texto(origem, "xMotivo") or ""
+
+    if cstat == _CODIGO_CSTAT_INUTILIZADO:
+        return {"status": "inutilizado", "mensagem": mensagem}
+    return {"status": "erro", "mensagem": mensagem or "Rejeitado pela Sefaz sem motivo informado"}

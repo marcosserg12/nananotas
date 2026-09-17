@@ -107,30 +107,53 @@ _INF_NFE_TAG = f"{{{NFE_NAMESPACE}}}infNFe"
 _C14N_ALGORITHM = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
 
 
-def _localizar_inf_nfe(root: "etree._Element") -> "etree._Element | None":
-    """Localiza o elemento `infNFe` a ser assinado, seja ele a própria raiz
-    do documento ou um descendente dela (o caso normal: raiz `<NFe>`,
-    `infNFe` como filho direto)."""
-    if root.tag == _INF_NFE_TAG:
+def _localizar_elemento(root: "etree._Element", tag_completa: str) -> "etree._Element | None":
+    """Localiza o elemento com a tag `{namespace}nome` informada, seja ele a
+    própria raiz do documento ou um descendente dela (o caso normal para
+    `infNFe`: raiz `<NFe>`, `infNFe` como filho direto -- mas também o caso
+    de outros documentos Sefaz assináveis, como `infInut` sob `<inutNFe>`)."""
+    if root.tag == tag_completa:
         return root
-    return root.find(f".//{_INF_NFE_TAG}")
+    return root.find(f".//{tag_completa}")
 
 
-def assinar_xml(xml_texto: str, certificado_path: str, certificado_senha: str) -> str:
-    """Assina o elemento `infNFe` do XML usando o certificado A1 informado.
+def _localizar_inf_nfe(root: "etree._Element") -> "etree._Element | None":
+    """Localiza o elemento `infNFe` a ser assinado. Mantida como wrapper
+    fino sobre `_localizar_elemento` só por compatibilidade de nome com o
+    que já existia; `assinar_xml` abaixo generaliza para outros elementos
+    via o parâmetro `nome_elemento`."""
+    return _localizar_elemento(root, _INF_NFE_TAG)
+
+
+def assinar_xml(
+    xml_texto: str, certificado_path: str, certificado_senha: str, nome_elemento: str = "infNFe"
+) -> str:
+    """Assina um elemento do XML (por padrão `infNFe`) usando o certificado
+    A1 informado.
+
+    `nome_elemento` generaliza esta função para assinar outros documentos
+    Sefaz além da própria NFC-e -- por exemplo `infInut` (pedido de
+    inutilização de numeração, Task 8) -- que usam exatamente o mesmo
+    mecanismo de assinatura (RSA-SHA1 enveloped, por `Id`, `<Signature>`
+    como irmão do elemento referenciado), só que com um elemento raiz de
+    dados diferente. O padrão `"infNFe"` preserva o comportamento e a
+    assinatura de chamada originais desta função (Task 4/6) inalterados
+    para todo código existente.
 
     1. Carrega o certificado A1 (.pfx) de `certificado_path` com a senha
        `certificado_senha` (via `erpbrasil.assinatura.certificado.Certificado`).
-    2. Assina o XML pelo atributo `Id` do elemento `infNFe` (RSA-SHA1,
+    2. Assina o XML pelo atributo `Id` do elemento `nome_elemento` (RSA-SHA1,
        enveloped signature, via `erpbrasil.assinatura.assinatura.
        XMLSignerWithSHA1` -- ver docstring do módulo para por que não se
        usa `Assinatura.assina_xml2` aqui).
     3. Levanta uma exceção com mensagem clara (nunca falha silenciosamente)
        se o caminho do certificado não existir, a senha estiver errada, o
        certificado estiver expirado, o arquivo não puder ser lido, ou o
-       XML de entrada não tiver um `infNFe` com `Id` para referenciar.
-    4. Retorna a string do XML assinado, com `<Signature>` como irmão de
-       `<infNFe>` (filho da raiz `<NFe>`), como o schema exige.
+       XML de entrada não tiver um elemento `nome_elemento` com `Id` para
+       referenciar.
+    4. Retorna a string do XML assinado, com `<Signature>` como irmão do
+       elemento `nome_elemento` (filho da raiz do documento), como o
+       schema exige.
     """
     if not os.path.exists(certificado_path):
         # `erpbrasil.assinatura.certificado.Certificado` só trata `arquivo`
@@ -163,13 +186,16 @@ def assinar_xml(xml_texto: str, certificado_path: str, certificado_senha: str) -
     except etree.XMLSyntaxError as exc:
         raise ValueError(f"XML de entrada mal formado, não é possível assinar: {exc}") from exc
 
-    inf_nfe = _localizar_inf_nfe(root)
-    if inf_nfe is None:
-        raise ValueError("XML de entrada não contém um elemento infNFe para assinar.")
+    tag_completa = f"{{{NFE_NAMESPACE}}}{nome_elemento}"
+    elemento = _localizar_elemento(root, tag_completa)
+    if elemento is None:
+        raise ValueError(f"XML de entrada não contém um elemento {nome_elemento} para assinar.")
 
-    reference = inf_nfe.get("Id")
+    reference = elemento.get("Id")
     if not reference:
-        raise ValueError("Elemento infNFe do XML de entrada não possui atributo Id para referenciar na assinatura.")
+        raise ValueError(
+            f"Elemento {nome_elemento} do XML de entrada não possui atributo Id para referenciar na assinatura."
+        )
 
     signer = XMLSignerWithSHA1(
         method=signxml.methods.enveloped,
