@@ -43,15 +43,29 @@ SVRS (o SVRS é conhecido por, historicamente, ter pequenas particularidades
 em relação ao contrato "padrão" de outras UFs).
 """
 
+import ssl
 from datetime import datetime
 from xml.etree import ElementTree
 
 import httpx
+import truststore
 from nfelib.nfe.bindings.v4_0 import InfInutXServ, InutNfe
 from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, TcodUfIbge, Tmod
 
 from app.config import settings
 from app.services.fiscal.sefaz_direto import assinatura
+
+# httpx (via `certifi`) usa uma lista de autoridades certificadoras própria
+# (Mozilla), que não inclui as raízes ICP-Brasil que assinam a cadeia de
+# certificado dos servidores da SVRS -- isso faz toda chamada real falhar
+# com "CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate",
+# mesmo o servidor sendo genuíno (confirmado: `curl`, que usa o repositório
+# de confiança nativo do sistema operacional via Schannel no Windows,
+# conecta normalmente). `truststore` faz o `ssl` do Python usar esse mesmo
+# repositório nativo do SO em vez do bundle do `certifi`, resolvendo isso
+# sem precisar desativar a verificação de certificado (o que seria um risco
+# de segurança real, não uma correção).
+_CONTEXTO_TLS_SO = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 ENDPOINTS = {
     "homologacao": {
@@ -165,6 +179,7 @@ def _postar_envelope(
             content=envelope.encode("utf-8"),
             headers=_cabecalhos_soap(namespace, operacao),
             timeout=_TIMEOUT_PADRAO_SEGUNDOS,
+            verify=_CONTEXTO_TLS_SO,
         )
     except httpx.HTTPError as exc:
         return None, f"Falha de comunicação com a Sefaz: {exc}"

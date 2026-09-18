@@ -16,3 +16,4 @@ nfelib==2.5.2
 erpbrasil.assinatura>=1.7.0
 signxml>=3.2.0
 qrcode[pil]==7.4.2
+truststore==0.10.4
