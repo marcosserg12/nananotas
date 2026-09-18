@@ -35,10 +35,9 @@ README (Task 9) e o relatório desta task para o item de acompanhamento.
 
 import random
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-# `Venda.data_venda` é gravado com `datetime.utcnow()` (naive UTC) em todo o
-# resto do sistema. Brasília é UTC-3 fixo (sem horário de verão desde 2019).
+# Brasília é UTC-3 fixo (sem horário de verão desde 2019).
 # Mesmo bug já corrigido uma vez em `dashboard_service.py` -- aqui a Sefaz
 # rejeitou a nota com "Data-Hora de Emissao posterior ao horario de
 # recebimento" porque `dhEmi` estava sendo montado com o valor UTC cru
@@ -196,9 +195,9 @@ def _tpamb() -> Tamb:
         )
 
 
-def _montar_chave_acesso(numero: int, serie: int, cnf: str, tp_emis: str, venda: Venda) -> str:
+def _montar_chave_acesso(numero: int, serie: int, cnf: str, tp_emis: str, momento_emissao_utc: "datetime") -> str:
     cnpj = _somente_digitos(settings.emitente_cnpj)
-    aamm = (venda.data_venda + FUSO_BRASILIA).strftime("%y%m")
+    aamm = (momento_emissao_utc + FUSO_BRASILIA).strftime("%y%m")
     chave_43 = (
         "53"  # cUF (Distrito Federal)
         + aamm
@@ -212,7 +211,9 @@ def _montar_chave_acesso(numero: int, serie: int, cnf: str, tp_emis: str, venda:
     return chave_43 + _calcular_dv_chave_acesso(chave_43)
 
 
-def _montar_ide(venda: Venda, numero: int, serie: int, cnf: str, chave: str) -> "Tnfe.InfNfe.Ide":
+def _montar_ide(
+    momento_emissao_utc: "datetime", numero: int, serie: int, cnf: str, chave: str
+) -> "Tnfe.InfNfe.Ide":
     return Tnfe.InfNfe.Ide(
         cUF=CUF_EMITENTE,
         cNF=cnf,
@@ -220,7 +221,7 @@ def _montar_ide(venda: Venda, numero: int, serie: int, cnf: str, chave: str) -> 
         mod=Tmod.VALUE_65,
         serie=str(serie),
         nNF=str(numero),
-        dhEmi=(venda.data_venda + FUSO_BRASILIA).strftime("%Y-%m-%dT%H:%M:%S-03:00"),
+        dhEmi=(momento_emissao_utc + FUSO_BRASILIA).strftime("%Y-%m-%dT%H:%M:%S-03:00"),
         tpNF=IdeTpNf.VALUE_1,  # saída
         idDest=IdeIdDest.VALUE_1,  # operação interna (dentro do DF)
         cMunFG=CMUNFG_EMITENTE,
@@ -425,8 +426,16 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     _validar_emitente_configurado()
     _validar_csc_configurado()
 
+    # `dhEmi` precisa ser o momento REAL da emissão (agora), não
+    # `venda.data_venda` (quando a venda foi criada/paga) -- confirmado em
+    # teste real: a Sefaz rejeita com "Data-Hora de emissão atrasada" assim
+    # que passam poucos minutos entre os dois. Isso importa de verdade pro
+    # fluxo real do restaurante: o pai às vezes fecha as notas só no fim do
+    # dia, bem depois da venda em si.
+    momento_emissao_utc = datetime.utcnow()
+
     cnf = _gerar_codigo_numerico_aleatorio()
-    chave = _montar_chave_acesso(numero, serie, cnf, tp_emis="1", venda=venda)
+    chave = _montar_chave_acesso(numero, serie, cnf, tp_emis="1", momento_emissao_utc=momento_emissao_utc)
 
     itens_det = [
         _montar_det(item, n_item=index, ambiente=settings.sefaz_ambiente)
@@ -438,7 +447,7 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     )
 
     inf_nfe = Tnfe.InfNfe(
-        ide=_montar_ide(venda, numero, serie, cnf, chave),
+        ide=_montar_ide(momento_emissao_utc, numero, serie, cnf, chave),
         emit=_montar_emit(),
         dest=_montar_dest(venda),
         det=itens_det,
