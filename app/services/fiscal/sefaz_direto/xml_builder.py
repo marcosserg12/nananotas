@@ -280,14 +280,27 @@ def _montar_dest(venda: Venda) -> "Tnfe.InfNfe.Dest | None":
     return Tnfe.InfNfe.Dest(**kwargs)
 
 
-def _montar_det(item, n_item: int) -> "Tnfe.InfNfe.Det":
+# Exigido pela Sefaz para toda NFC-e emitida em homologação: a descrição do
+# PRIMEIRO item precisa ser exatamente esta string (regra padrão nacional,
+# não específica do DF) -- sem isso a nota é rejeitada mesmo estando
+# estruturalmente correta, confirmado em teste real contra a SVRS. Nunca
+# usar em produção (lá a descrição real do produto é obrigatória).
+_DESCRICAO_PRIMEIRO_ITEM_HOMOLOGACAO = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+
+
+def _montar_det(item, n_item: int, ambiente: str) -> "Tnfe.InfNfe.Det":
     produto = item.produto
     v_prod = (item.quantidade * item.preco_unitario).quantize(DUAS_CASAS, rounding=ROUND_HALF_UP)
+    x_prod = (
+        _DESCRICAO_PRIMEIRO_ITEM_HOMOLOGACAO
+        if (n_item == 1 and ambiente == "homologacao")
+        else produto.nome
+    )
 
     prod = Tnfe.InfNfe.Det.Prod(
         cProd=produto.codigo_interno,
         cEAN="SEM GTIN",
-        xProd=produto.nome,
+        xProd=x_prod,
         NCM=produto.ncm,
         CFOP=CFOP_VENDA_DENTRO_DO_ESTADO,
         uCom=produto.unidade,
@@ -405,7 +418,8 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     chave = _montar_chave_acesso(numero, serie, cnf, tp_emis="1", venda=venda)
 
     itens_det = [
-        _montar_det(item, n_item=index) for index, item in enumerate(venda.itens, start=1)
+        _montar_det(item, n_item=index, ambiente=settings.sefaz_ambiente)
+        for index, item in enumerate(venda.itens, start=1)
     ]
     valor_produtos = sum(
         (item.quantidade * item.preco_unitario).quantize(DUAS_CASAS, rounding=ROUND_HALF_UP)
@@ -425,4 +439,16 @@ def montar_nfce_xml(venda: Venda, numero: int, serie: int = 1) -> str:
     )
 
     nfe = Nfe(infNFe=inf_nfe, infNFeSupl=_montar_inf_nfe_supl(chave))
-    return nfe.to_xml()
+    # `indent=""` -- a Sefaz rejeita a mensagem se houver qualquer espaço ou
+    # quebra de linha entre as tags ("não é permitida a presença de
+    # caracteres de edição... entre as tags da mensagem"), confirmado em
+    # teste real contra a homologação da SVRS. O padrão de `to_xml()` (dois
+    # espaços de indentação) passa na validação do schema e na assinatura
+    # digital, mas é rejeitado por essa regra de negócio específica da
+    # Sefaz, que é mais estrita que "XML bem formado e assinado
+    # corretamente".
+    # `indent=""` ainda deixa uma quebra de linha entre a declaração
+    # `<?xml ...?>` e a tag raiz `<NFe>` -- removida aqui pra não arriscar
+    # que essa quebra também caia na regra "sem caracteres de edição no
+    # início da mensagem".
+    return nfe.to_xml(indent="").replace("?>\n<", "?><")

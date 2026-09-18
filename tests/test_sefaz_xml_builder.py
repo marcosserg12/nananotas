@@ -303,3 +303,43 @@ def test_montar_nfce_xml_chave_de_acesso_tem_44_digitos_e_dv_correto(db_session)
     assert len(chave) == 44
     assert chave.isdigit()
     assert xml_builder._calcular_dv_chave_acesso(chave[:-1]) == chave[-1]
+
+
+def test_montar_nfce_xml_em_homologacao_forca_descricao_do_primeiro_item(db_session):
+    """Regra confirmada em teste real contra a SVRS: em homologação, a
+    Sefaz rejeita a nota se a descrição do primeiro item não for
+    exatamente esta string -- mesmo com a nota estruturalmente correta."""
+    venda = _venda_com_item(db_session)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    x_prod = raiz.find(".//nfe:det[@nItem='1']/nfe:prod/nfe:xProd", NS)
+    assert x_prod.text == "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+
+
+def test_montar_nfce_xml_em_producao_usa_a_descricao_real_do_produto(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "sefaz_ambiente", "producao")
+    venda = _venda_com_item(db_session)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    x_prod = raiz.find(".//nfe:det[@nItem='1']/nfe:prod/nfe:xProd", NS)
+    assert x_prod.text == "Lanche"
+
+
+def test_montar_nfce_xml_nao_tem_espacos_ou_quebras_de_linha_entre_as_tags(db_session):
+    """Regra confirmada em teste real contra a SVRS: 'não é permitida a
+    presença de caracteres de edição no início/fim da mensagem ou entre as
+    tags da mensagem' -- a serialização padrão da nfelib (`to_xml()` sem
+    argumentos) indenta com quebras de linha e é rejeitada por essa regra,
+    mesmo sendo XML bem formado e corretamente assinado."""
+    venda = _venda_com_item(db_session)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    corpo_apos_declaracao = xml_texto.split("?>", 1)[1]
+    assert "\n" not in corpo_apos_declaracao
+    assert "> <" not in corpo_apos_declaracao
+    assert ">  <" not in corpo_apos_declaracao
