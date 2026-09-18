@@ -35,6 +35,17 @@ README (Task 9) e o relatório desta task para o item de acompanhamento.
 
 import random
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
+
+# `Venda.data_venda` é gravado com `datetime.utcnow()` (naive UTC) em todo o
+# resto do sistema. Brasília é UTC-3 fixo (sem horário de verão desde 2019).
+# Mesmo bug já corrigido uma vez em `dashboard_service.py` -- aqui a Sefaz
+# rejeitou a nota com "Data-Hora de Emissao posterior ao horario de
+# recebimento" porque `dhEmi` estava sendo montado com o valor UTC cru
+# rotulado como se já fosse hora de Brasília (`-03:00`), ficando 3h no
+# "futuro" em relação ao horário real do servidor -- confirmado em teste
+# real contra a SVRS.
+FUSO_BRASILIA = timedelta(hours=-3)
 
 from nfelib.nfe.bindings.v4_0 import Nfe
 from nfelib.nfe.bindings.v4_0.leiaute_nfe_v4_00 import (
@@ -187,7 +198,7 @@ def _tpamb() -> Tamb:
 
 def _montar_chave_acesso(numero: int, serie: int, cnf: str, tp_emis: str, venda: Venda) -> str:
     cnpj = _somente_digitos(settings.emitente_cnpj)
-    aamm = venda.data_venda.strftime("%y%m")
+    aamm = (venda.data_venda + FUSO_BRASILIA).strftime("%y%m")
     chave_43 = (
         "53"  # cUF (Distrito Federal)
         + aamm
@@ -209,7 +220,7 @@ def _montar_ide(venda: Venda, numero: int, serie: int, cnf: str, chave: str) -> 
         mod=Tmod.VALUE_65,
         serie=str(serie),
         nNF=str(numero),
-        dhEmi=venda.data_venda.strftime("%Y-%m-%dT%H:%M:%S-03:00"),
+        dhEmi=(venda.data_venda + FUSO_BRASILIA).strftime("%Y-%m-%dT%H:%M:%S-03:00"),
         tpNF=IdeTpNf.VALUE_1,  # saída
         idDest=IdeIdDest.VALUE_1,  # operação interna (dentro do DF)
         cMunFG=CMUNFG_EMITENTE,

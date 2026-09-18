@@ -305,6 +305,28 @@ def test_montar_nfce_xml_chave_de_acesso_tem_44_digitos_e_dv_correto(db_session)
     assert xml_builder._calcular_dv_chave_acesso(chave[:-1]) == chave[-1]
 
 
+def test_montar_nfce_xml_dhemi_reflete_hora_de_brasilia_nao_utc_cru(db_session):
+    """Regressão do bug encontrado em teste real contra a SVRS: a Sefaz
+    rejeitava a nota com 'Data-Hora de Emissao posterior ao horario de
+    recebimento' porque `dhEmi` usava o valor UTC cru de `venda.data_venda`
+    rotulado com o sufixo `-03:00`, ficando 3h no futuro."""
+    from datetime import datetime
+
+    venda = _venda_com_item(db_session)
+    hora_utc_antes = datetime.utcnow()
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    dh_emi_texto = raiz.find(".//nfe:ide/nfe:dhEmi", NS).text
+    dh_emi_sem_fuso = datetime.strptime(dh_emi_texto[:19], "%Y-%m-%dT%H:%M:%S")
+    # dhEmi (rotulado -03:00, i.e. já em hora local) precisa ser ~3h ANTES
+    # da hora UTC real -- se estivesse errado (UTC cru rotulado -03:00),
+    # ficaria ~3h DEPOIS da hora UTC real em vez de antes.
+    assert dh_emi_sem_fuso < hora_utc_antes
+    assert (hora_utc_antes - dh_emi_sem_fuso).total_seconds() < 4 * 3600
+
+
 def test_montar_nfce_xml_em_homologacao_forca_descricao_do_primeiro_item(db_session):
     """Regra confirmada em teste real contra a SVRS: em homologação, a
     Sefaz rejeita a nota se a descrição do primeiro item não for
