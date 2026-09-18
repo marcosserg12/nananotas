@@ -98,6 +98,34 @@ def test_adicionar_item_com_quantidade_invalida_nao_quebra(authed_client, db_ses
     assert "Quantidade" in resposta.text
 
 
+def test_adicionar_item_sem_selecionar_produto_nao_quebra(authed_client, db_session):
+    """Regressão de um bug real encontrado testando pela tela: submeter o
+    formulário sem clicar num resultado da busca mandava `produto_id` em
+    branco, e como o campo era `int` direto no Form, o FastAPI recusava com
+    um 422 cru (sem mensagem em português) antes mesmo do código da rota
+    rodar."""
+    from app.services import clientes_service, vendas_service
+
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    resposta = authed_client.post(f"/vendas/{venda.id}/itens", data={"produto_id": "", "quantidade": "1"})
+
+    assert resposta.status_code == 400
+    assert "Selecione um produto" in resposta.text
+
+
+def test_adicionar_item_com_produto_inexistente_nao_quebra(authed_client, db_session):
+    from app.services import clientes_service, vendas_service
+
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    resposta = authed_client.post(f"/vendas/{venda.id}/itens", data={"produto_id": "99999", "quantidade": "1"})
+
+    assert resposta.status_code == 400
+
+
 def test_remover_item_inexistente_nao_quebra(authed_client, db_session):
     resposta = authed_client.post("/vendas/itens/99999/remover")
 

@@ -37,12 +37,25 @@ def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usua
 def adicionar_item(
     venda_id: int,
     request: Request,
-    produto_id: int = Form(...),
+    produto_id: str = Form(""),
     quantidade: str = Form("1"),
     preco_unitario: str = Form(""),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
+    # `produto_id` só é preenchido quando o vendedor clica num resultado da
+    # busca (ver produtos/_resultado_busca.html); submeter o formulário sem
+    # selecionar nada manda esse campo em branco. Antes disso era declarado
+    # como `int` direto no Form, e o FastAPI recusava com um 422 cru (sem
+    # mensagem em português) antes mesmo de chegar aqui -- agora tratamos
+    # como um erro de validação normal, igual quantidade/preço.
+    if not produto_id.strip():
+        raise HTTPException(status_code=400, detail="Selecione um produto na busca antes de adicionar")
+    try:
+        produto_id_int = int(produto_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Produto inválido")
+
     try:
         quantidade_decimal = Decimal(quantidade)
     except InvalidOperation:
@@ -55,7 +68,10 @@ def adicionar_item(
         except InvalidOperation:
             raise HTTPException(status_code=400, detail="Preço inválido")
 
-    vendas_service.adicionar_item(db, venda_id, produto_id, quantidade_decimal, preco_unitario_decimal)
+    try:
+        vendas_service.adicionar_item(db, venda_id, produto_id_int, quantidade_decimal, preco_unitario_decimal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     venda = db.get(Venda, venda_id)
     return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
 
