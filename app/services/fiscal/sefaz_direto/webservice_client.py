@@ -44,11 +44,14 @@ em relação ao contrato "padrão" de outras UFs).
 """
 
 import ssl
+import tempfile
 from datetime import datetime
+from pathlib import Path
 from xml.etree import ElementTree
 
 import httpx
 import truststore
+from erpbrasil.assinatura.certificado import Certificado
 from nfelib.nfe.bindings.v4_0 import InfInutXServ, InutNfe
 from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, TcodUfIbge, Tmod
 
@@ -65,7 +68,44 @@ from app.services.fiscal.sefaz_direto import assinatura
 # repositório nativo do SO em vez do bundle do `certifi`, resolvendo isso
 # sem precisar desativar a verificação de certificado (o que seria um risco
 # de segurança real, não uma correção).
-_CONTEXTO_TLS_SO = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+#
+# CONFIRMADO EM TESTE REAL (não mais só pesquisa secundária): depois de
+# corrigir o problema acima, a chamada real a `/ws/NfeAutorizacao/...`
+# retornou HTTP 403 "Forbidden: Access is denied... using the credentials
+# that you supplied" -- exatamente o comportamento que a nota do WSDL logo
+# abaixo já esperava: essas rotas exigem TLS mútuo (o SERVIDOR pede um
+# certificado do CLIENTE durante o handshake, não só o contrário). Sem
+# apresentar o certificado A1 como certificado de cliente, a conexão TLS
+# até completa, mas o IIS nega a rota antes de qualquer processamento da
+# NFC-e -- por isso `_postar_envelope` carrega o certificado configurado
+# (`settings.sefaz_certificado_path`) como certificado de cliente em cada
+# chamada, via `_contexto_tls_com_certificado_cliente`.
+
+
+def _contexto_tls_com_certificado_cliente() -> ssl.SSLContext:
+    """Monta um contexto TLS que (a) confia no repositório de certificados
+    nativo do SO (via truststore, para verificar o servidor) e (b) apresenta
+    o certificado A1 configurado como certificado de CLIENTE (exigido pelo
+    handshake mTLS da SVRS).
+
+    O `Certificado` da `erpbrasil.assinatura` (já usado em `assinatura.py`)
+    carrega o `.pfx` e expõe `cert_chave()` -- o certificado e a chave
+    privada já em PEM sem senha. `ssl.SSLContext.load_cert_chain` só aceita
+    caminhos de arquivo, não bytes em memória, então gravamos os dois num
+    diretório temporário que é apagado assim que o contexto termina de
+    carregá-los (a chave privada nunca fica em disco além desse instante).
+    """
+    certificado = Certificado(settings.sefaz_certificado_path, settings.sefaz_certificado_senha)
+    cert_pem, chave_pem = certificado.cert_chave()
+
+    contexto = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    with tempfile.TemporaryDirectory() as diretorio_temporario:
+        caminho_cert = Path(diretorio_temporario) / "cert.pem"
+        caminho_chave = Path(diretorio_temporario) / "chave.pem"
+        caminho_cert.write_text(cert_pem)
+        caminho_chave.write_text(chave_pem)
+        contexto.load_cert_chain(certfile=str(caminho_cert), keyfile=str(caminho_chave))
+    return contexto
 
 ENDPOINTS = {
     "homologacao": {
@@ -174,12 +214,17 @@ def _postar_envelope(
 ) -> tuple[httpx.Response | None, str | None]:
     envelope = _montar_envelope(xml_dados, namespace)
     try:
+        contexto = _contexto_tls_com_certificado_cliente()
+    except Exception as exc:  # noqa: BLE001 -- nunca deixar erro de certificado propagar sem tratamento
+        return None, f"Falha ao carregar o certificado para autenticar na Sefaz: {exc}"
+
+    try:
         response = httpx.post(
             url,
             content=envelope.encode("utf-8"),
             headers=_cabecalhos_soap(namespace, operacao),
             timeout=_TIMEOUT_PADRAO_SEGUNDOS,
-            verify=_CONTEXTO_TLS_SO,
+            verify=contexto,
         )
     except httpx.HTTPError as exc:
         return None, f"Falha de comunicação com a Sefaz: {exc}"
