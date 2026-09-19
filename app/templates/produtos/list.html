@@ -7,12 +7,12 @@
 </div>
 {% for categoria, produtos in grupos %}
 <h2 class="text-lg font-semibold mt-6 mb-2">{{ categoria.nome }}</h2>
-<table class="w-full bg-white rounded shadow overflow-hidden mb-4">
+<div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
+<table class="w-full">
     <thead class="bg-slate-100 text-left">
         <tr>
             <th class="p-2">Código</th>
             <th class="p-2">Nome</th>
-            <th class="p-2">Estoque</th>
             <th class="p-2">Preço venda</th>
             <th class="p-2">Ativo</th>
             <th class="p-2"></th>
@@ -21,22 +21,24 @@
     <tbody>
         {% for produto in produtos %}
         <tr class="border-t">
-            <td class="p-2">{{ produto.codigo_interno }}</td>
-            <td class="p-2">{{ produto.nome }}</td>
-            <td class="p-2">{{ produto.estoque_atual }}</td>
-            <td class="p-2">R$ {{ "%.2f"|format(produto.preco_venda) }}</td>
-            <td class="p-2">{{ "Sim" if produto.ativo else "Não" }}</td>
-            <td class="p-2 flex gap-3 items-center">
-                <a href="/produtos/{{ produto.id }}/editar" class="text-slate-600 underline">Editar</a>
-                <form method="post" action="/produtos/{{ produto.id }}/alternar-ativo">
-                    <button type="submit" class="text-slate-600 underline">
-                        {{ "Desativar" if produto.ativo else "Ativar" }}
-                    </button>
-                </form>
+            <td class="p-2" data-label="Código">{{ produto.codigo_interno }}</td>
+            <td class="p-2" data-label="Nome">{{ produto.nome }}</td>
+            <td class="p-2" data-label="Preço venda">R$ {{ "%.2f"|format(produto.preco_venda) }}</td>
+            <td class="p-2" data-label="Ativo">{{ "Sim" if produto.ativo else "Não" }}</td>
+            <td class="p-2" data-label="Ações">
+                <div class="flex gap-3 items-center justify-end">
+                    <a href="/produtos/{{ produto.id }}/editar" class="text-slate-600 underline">Editar</a>
+                    <form method="post" action="/produtos/{{ produto.id }}/alternar-ativo">
+                        <button type="submit" class="text-slate-600 underline">
+                            {{ "Desativar" if produto.ativo else "Ativar" }}
+                        </button>
+                    </form>
+                </div>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endfor %}
 {% endblock %}

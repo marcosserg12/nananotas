@@ -117,4 +117,6 @@ def buscar(
     usuario: Usuario = Depends(get_current_user),
 ):
     produtos = produtos_service.buscar_produtos(db, termo) if termo else []
-    return templates.TemplateResponse("produtos/_resultado_busca.html", {"request": request, "produtos": produtos})
+    return templates.TemplateResponse(
+        "produtos/_resultado_busca.html", {"request": request, "produtos": produtos, "termo": termo}
+    )

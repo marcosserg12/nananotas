@@ -5,7 +5,8 @@
 
 {% if parcelas %}
 <h2 class="font-semibold mb-2">Parcelas — {{ venda.forma_pagamento or "-" }}</h2>
-<table class="w-full bg-white rounded shadow overflow-hidden mb-4">
+<div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
+<table class="w-full">
     <thead class="bg-slate-100 text-left">
         <tr>
             <th class="p-2">Nº</th>
@@ -17,14 +18,15 @@
     <tbody>
         {% for parcela in parcelas %}
         <tr class="border-t">
-            <td class="p-2">{{ parcela.numero }}</td>
-            <td class="p-2">R$ {{ "%.2f"|format(parcela.valor) }}</td>
-            <td class="p-2">{{ parcela.vencimento.strftime("%d/%m/%Y") }}</td>
-            <td class="p-2">{{ "Pago" if parcela.status.value == "pago" else "Em aberto" }}</td>
+            <td class="p-2" data-label="Nº">{{ parcela.numero }}</td>
+            <td class="p-2" data-label="Valor">R$ {{ "%.2f"|format(parcela.valor) }}</td>
+            <td class="p-2" data-label="Vencimento">{{ parcela.vencimento.strftime("%d/%m/%Y") }}</td>
+            <td class="p-2" data-label="Status">{{ "Pago" if parcela.status.value == "pago" else "Em aberto" }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 {% endif %}
 
 {% if nota is none or (nota.status.value == "rejeitada" and not nota.chave_acesso) %}
@@ -40,9 +42,13 @@
 
 {% if venda.status.value == "pago" %}
 <div class="bg-white p-4 rounded shadow mb-4">
-    <h2 class="font-semibold mb-2">Resumo pra digitar no Emissor Gratuito do SEBRAE</h2>
-    <p class="text-sm text-slate-600 mb-2">Cliente: {{ venda.cliente.nome }} — Forma de pagamento: {{ venda.forma_pagamento or "-" }}</p>
-    <table class="w-full mb-3">
+    <h2 class="font-semibold mb-2">Resumo da venda</h2>
+    <p class="text-sm text-slate-600 mb-2">
+        Cliente: {{ venda.cliente.nome }} — Forma de pagamento: {{ formas_pagamento.get(venda.forma_pagamento, venda.forma_pagamento) or "-" }}
+        {% if venda.bandeira %} — Bandeira: {{ bandeiras.get(venda.bandeira, venda.bandeira) }}{% endif %}
+    </p>
+    <div class="tabela-scroll mb-3">
+    <table class="w-full">
         <thead class="text-left text-sm text-slate-500">
             <tr>
                 <th class="pr-4">Produto</th>
@@ -54,31 +60,38 @@
         <tbody>
             {% for item in venda.itens %}
             <tr>
-                <td class="pr-4">{{ item.produto.nome }}</td>
-                <td class="pr-4">{{ item.quantidade }}</td>
-                <td class="pr-4">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
-                <td>R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
+                <td class="pr-4" data-label="Produto">{{ item.produto.nome }}</td>
+                <td class="pr-4" data-label="Qtd">{{ item.quantidade }}</td>
+                <td class="pr-4" data-label="Preço unit.">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
+                <td data-label="Total">R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-    <p class="font-semibold mb-3">Total: R$ {{ "%.2f"|format(venda.valor_total) }}</p>
-    <a href="https://sebrae.com.br/sites/PortalSebrae/produtoseservicos/emissornfe" target="_blank" class="inline-block bg-slate-800 text-white px-4 py-2 rounded mb-2">
-        Abrir Emissor Gratuito do SEBRAE
-    </a>
-    <form method="post" action="/vendas/{{ venda.id }}/nota/marcar-manual" class="flex flex-wrap gap-2 items-end mt-2">
-        <div>
-            <label class="block text-sm">Chave de acesso da nota (opcional)</label>
-            <input type="text" name="chave_acesso" maxlength="44" class="border rounded px-3 py-2 w-72">
-        </div>
-        <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded">Marcar nota como emitida</button>
+    </div>
+    <p class="font-semibold">Total: R$ {{ "%.2f"|format(venda.valor_total) }}</p>
+</div>
+
+<p class="text-sm text-slate-500 mb-3">
+    Quer excluir este orçamento em vez de gerar a nota? Isso agora se faz na tela de
+    <a href="/vendas/orcamentos" class="underline">Orçamentos</a> — depois que a nota fiscal for gerada
+    e autorizada, não é mais possível excluir, só cancelar a nota.
+</p>
+<div class="flex flex-wrap gap-2 mb-4">
+    <a href="/vendas/{{ venda.id }}" class="bg-slate-200 text-slate-800 px-4 py-2 rounded">Voltar</a>
+    <form method="post" action="/vendas/{{ venda.id }}/nota/emitir">
+        <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded font-semibold">Gerar Cupom Fiscal</button>
     </form>
 </div>
 
 <details class="mb-4">
-    <summary class="cursor-pointer text-slate-600 underline">Ou emitir por um provedor pago (Focus NFe), caso a integração direta não funcione</summary>
-    <form method="post" action="/vendas/{{ venda.id }}/nota/emitir" class="mt-2">
-        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Gerar Cupom Fiscal</button>
+    <summary class="cursor-pointer text-slate-600 underline">Já emiti essa nota por fora e só quero registrar a chave de acesso</summary>
+    <form method="post" action="/vendas/{{ venda.id }}/nota/marcar-manual" class="flex flex-wrap gap-2 items-end mt-2">
+        <div>
+            <label class="block text-sm">Chave de acesso da nota (opcional)</label>
+            <input type="text" name="chave_acesso" maxlength="44" class="border rounded px-3 py-2 w-full sm:w-72">
+        </div>
+        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Marcar nota como emitida</button>
     </form>
 </details>
 {% else %}
@@ -96,9 +109,13 @@
 {% endif %}
 {% if nota.chave_acesso %}
 <p class="mb-2">Chave de acesso: {{ nota.chave_acesso }}</p>
+<p class="text-sm text-slate-500 mb-2">
+    Esta venda já tem uma nota fiscal com chave de acesso -- não pode mais ser excluída.
+    {% if nota.status.value == "autorizada" %}Se precisar desfazer, use "Cancelar nota" abaixo.{% endif %}
+</p>
 {% endif %}
 {% if nota.provedor == "manual" %}
-<p class="text-sm text-slate-600">Nota marcada manualmente como emitida (via SEBRAE).</p>
+<p class="text-sm text-slate-600">Nota marcada manualmente como emitida.</p>
 {% else %}
 <div class="flex gap-2 mt-4">
     <form method="post" action="/vendas/{{ venda.id }}/nota/consultar">

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     emitente_endereco_municipio: str = ""
     emitente_endereco_uf: str = "DF"
     emitente_endereco_cep: str = ""
+    emitente_telefone: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

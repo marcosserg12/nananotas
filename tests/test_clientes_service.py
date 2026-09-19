@@ -20,6 +20,27 @@ def test_criar_cliente_pf(db_session):
     assert cliente.consumidor_final is False
 
 
+def test_criar_cliente_com_endereco_estruturado(db_session):
+    cliente = clientes_service.criar_cliente(
+        db_session,
+        tipo_pessoa=TipoPessoa.PJ,
+        nome="Empresa ABC",
+        cpf_cnpj="11222333000181",
+        tipo_inscricao_estadual="normal",
+        endereco_cep="70000000",
+        endereco_logradouro="Rua das Flores",
+        endereco_numero="123",
+        endereco_complemento="Sala 1",
+        endereco_bairro="Asa Sul",
+        endereco_cidade="Brasília",
+        endereco_uf="DF",
+    )
+
+    assert cliente.endereco_logradouro == "Rua das Flores"
+    assert cliente.endereco_uf == "DF"
+    assert cliente.tipo_inscricao_estadual == "normal"
+
+
 def test_buscar_clientes_por_nome_ou_documento(db_session):
     clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PJ, nome="Empresa XYZ", cpf_cnpj="11222333000181")
 

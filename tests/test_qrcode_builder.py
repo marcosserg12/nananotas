@@ -29,6 +29,16 @@ def test_montar_url_qrcode_hash_bate_com_formula_sha1_maiuscula():
     assert url == f"http://www.fazenda.df.gov.br/nfce/qrcode?p={parametros_sem_hash}|{hash_esperado}"
 
 
+def test_montar_url_consulta_chave_e_distinta_da_url_do_qrcode():
+    """Regressão: a função devolvia por engano a mesma base do QR Code
+    (`/nfce/qrcode`) -- confirmada contra o DANFE real de uma nota emitida
+    para este CNPJ, que mostra "Consulte pela Chave de Acesso em:
+    www.fazenda.df.gov.br/nfce/consulta", um endpoint diferente."""
+    url = qrcode_builder.montar_url_consulta_chave()
+
+    assert url == "http://www.fazenda.df.gov.br/nfce/consulta"
+
+
 def test_gerar_imagem_qrcode_base64_retorna_data_uri_png():
     imagem = qrcode_builder.gerar_imagem_qrcode_base64("http://www.fazenda.df.gov.br/nfce/qrcode?p=teste")
 

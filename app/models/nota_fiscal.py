@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -28,5 +28,11 @@ class NotaFiscal(Base):
     url_danfe = Column(String(255), nullable=True)
     url_xml = Column(String(255), nullable=True)
     mensagem_erro = Column(Text, nullable=True)
+    # Momento (UTC) em que a nota passou a "autorizada" pela primeira vez --
+    # usado só para exibir "Data de Autorização" no DANFE (ver
+    # app/services/fiscal/sefaz_direto/xml_builder.py::FUSO_BRASILIA pro
+    # padrão de conversão pra hora de Brasília). Nunca sobrescrito depois de
+    # preenchido, mesmo que a nota seja reconsultada várias vezes.
+    autorizado_em = Column(DateTime, nullable=True)
 
     venda = relationship("Venda")

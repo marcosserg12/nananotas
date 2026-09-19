@@ -7,16 +7,22 @@ import qrcode
 _VERSAO_QRCODE = "2"
 _BASE_URL = "http://www.fazenda.df.gov.br/nfce/qrcode?"
 
+# URL de consulta MANUAL (digitando a chave de acesso), distinta da URL do
+# QR Code (`_BASE_URL` acima) -- confirmada contra o DANFE real de uma nota
+# emitida em produção pelo sistema anterior da Nana Lanches (mesmo CNPJ),
+# que mostra exatamente "Consulte pela Chave de Acesso em:
+# www.fazenda.df.gov.br/nfce/consulta". Antes desta correção,
+# `montar_url_consulta_chave` devolvia por engano a mesma base do QR Code
+# (`/nfce/qrcode`, sem a query string), que é o endpoint errado para
+# digitação manual.
+_URL_CONSULTA_MANUAL = "http://www.fazenda.df.gov.br/nfce/consulta"
+
 
 def montar_url_consulta_chave() -> str:
     """URL de consulta manual da NFC-e pela chave de acesso (`urlChave`, o
     outro campo obrigatório de `infNFeSupl` além de `qrCode` -- ver
-    Tnfe.InfNfeSupl na nfelib). É a mesma base usada para o QR Code, sem a
-    query string `p=...` (que é específica de cada nota); o portal da
-    Sefaz-DF usa esse mesmo endpoint tanto para o QR Code quanto para
-    digitação manual da chave, então não há uma segunda URL distinta
-    documentada para este emitente."""
-    return _BASE_URL.rstrip("?")
+    Tnfe.InfNfe.Supl na nfelib)."""
+    return _URL_CONSULTA_MANUAL
 
 
 def montar_url_qrcode(chave_acesso: str, ambiente: str, csc_id: str, csc_token: str) -> str:

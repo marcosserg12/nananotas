@@ -16,6 +16,42 @@ def test_listar_produtos_agrupados_por_categoria(authed_client, db_session):
     assert "Refrigerante" in response.text
 
 
+def test_listar_produtos_nao_mostra_mais_coluna_de_estoque(authed_client, db_session):
+    produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Refrigerante", categoria_nome="Diversos",
+        ncm="22021000", unidade="UN", preco_venda=Decimal("5.00"), estoque_atual=Decimal("10"),
+    )
+
+    response = authed_client.get("/produtos")
+
+    assert response.status_code == 200
+    assert "Estoque" not in response.text
+
+
+def test_formulario_de_produto_nao_pede_mais_estoque(authed_client):
+    response = authed_client.get("/produtos/novo")
+
+    assert response.status_code == 200
+    assert "estoque" not in response.text.lower()
+
+
+def test_listar_produtos_tem_data_label_pra_tabela_responsiva_no_celular(authed_client, db_session):
+    """Sem os `data-label`, a tabela vira uma lista de valores sem indicar
+    qual coluna é qual quando o CSS a transforma em cartões empilhados no
+    celular (ver `.tabela-scroll` em base.html)."""
+    produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Refrigerante", categoria_nome="Diversos",
+        ncm="22021000", unidade="UN", preco_venda=Decimal("5.00"),
+    )
+
+    response = authed_client.get("/produtos")
+
+    assert response.status_code == 200
+    assert 'data-label="Código"' in response.text
+    assert 'data-label="Nome"' in response.text
+    assert 'data-label="Preço venda"' in response.text
+
+
 def test_criar_produto_via_formulario(authed_client):
     response = authed_client.post(
         "/produtos/novo",
@@ -114,3 +150,26 @@ def test_buscar_produtos_retorna_html_parcial(authed_client, db_session):
 
     assert response.status_code == 200
     assert "Água Mineral" in response.text
+
+
+def test_buscar_produtos_com_termo_vazio_nao_lista_todos(authed_client, db_session):
+    """Regressão de um bug real visto pela tela: limpar o campo de busca (ou
+    nunca ter digitado nada) não pode fazer o dropdown mostrar todos os
+    produtos cadastrados -- só deve reagir a uma busca de verdade."""
+    produtos_service.criar_produto(
+        db_session, codigo_interno="1", nome="Água Mineral", categoria_nome="Água Mineral",
+        ncm="22011000", unidade="UN", preco_venda=Decimal("3.00"),
+    )
+
+    response = authed_client.get("/produtos/buscar", params={"termo": ""})
+
+    assert response.status_code == 200
+    assert "Água Mineral" not in response.text
+    assert "<ul" not in response.text
+
+
+def test_buscar_produtos_sem_resultado_mostra_mensagem(authed_client, db_session):
+    response = authed_client.get("/produtos/buscar", params={"termo": "xyz-nao-existe"})
+
+    assert response.status_code == 200
+    assert "Nenhum produto encontrado" in response.text

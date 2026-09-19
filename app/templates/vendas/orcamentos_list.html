@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Orçamentos - Nana Lanches{% endblock %}
+{% block content %}
+<div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+    <h1 class="text-2xl font-bold">Orçamentos</h1>
+    <a href="/vendas/nova" class="bg-brand-500 text-white px-4 py-2 rounded">+ Novo orçamento</a>
+</div>
+<p class="text-slate-600 mb-4">
+    Vendas que ainda podem ser editadas ou excluídas — em edição ou já pagas mas sem nota fiscal emitida.
+    Depois que a nota fiscal é autorizada, a venda sai desta lista e passa a aparecer em
+    <a href="/vendas/notas" class="underline">Notas Fiscais</a>, onde só pode ser desfeita cancelando a nota.
+</p>
+
+<div class="bg-white rounded shadow overflow-hidden tabela-scroll">
+<table class="w-full">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Nº</th>
+            <th class="p-2">Cliente</th>
+            <th class="p-2">Situação</th>
+            <th class="p-2">Valor</th>
+            <th class="p-2"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for venda in orcamentos %}
+        <tr class="border-t">
+            <td class="p-2" data-label="Nº">{{ venda.numero_orcamento }}</td>
+            <td class="p-2" data-label="Cliente">{{ venda.cliente.nome }}</td>
+            <td class="p-2" data-label="Situação">
+                {% if venda.status.value == "orcamento" %}
+                Em edição
+                {% else %}
+                Pago — nota ainda não emitida
+                {% endif %}
+            </td>
+            <td class="p-2" data-label="Valor">R$ {{ "%.2f"|format(venda.valor_total) }}</td>
+            <td class="p-2" data-label="Ações">
+                <div class="flex flex-wrap gap-3 items-center justify-end">
+                    {% if venda.status.value == "orcamento" %}
+                    <a href="/vendas/{{ venda.id }}" class="text-slate-600 underline">Continuar</a>
+                    {% else %}
+                    <a href="/vendas/{{ venda.id }}/nota" class="text-slate-600 underline">Emitir nota</a>
+                    {% endif %}
+                    <form method="post" action="/vendas/{{ venda.id }}/excluir" onsubmit="return confirm('Excluir este orçamento? Essa ação não pode ser desfeita.');">
+                        <button type="submit" class="text-red-600 underline">Excluir</button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not orcamentos %}
+        <tr class="border-t">
+            <td class="p-2 text-slate-500" colspan="5">Nenhum orçamento em aberto.</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

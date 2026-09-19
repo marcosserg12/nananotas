@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Notas Fiscais - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Notas Fiscais</h1>
+
+<form method="get" action="/vendas/notas" class="bg-white p-4 rounded shadow mb-4 flex flex-wrap gap-2 items-end">
+    <div>
+        <label class="block text-sm">Cliente</label>
+        <input type="text" name="cliente" value="{{ filtro_cliente }}" placeholder="Nome do cliente" class="border rounded px-3 py-2">
+    </div>
+    <div>
+        <label class="block text-sm">Data</label>
+        <input type="date" name="data" value="{{ filtro_data }}" class="border rounded px-3 py-2">
+    </div>
+    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Filtrar</button>
+    {% if filtro_cliente or filtro_data %}
+    <a href="/vendas/notas" class="text-slate-600 underline px-2 py-2">Limpar filtro</a>
+    {% endif %}
+</form>
+
+<div class="bg-white rounded shadow overflow-hidden tabela-scroll">
+<table class="w-full">
+    <thead class="bg-slate-100 text-left">
+        <tr>
+            <th class="p-2">Orçamento</th>
+            <th class="p-2">NFCe</th>
+            <th class="p-2">Data/Hora</th>
+            <th class="p-2">Cliente</th>
+            <th class="p-2">Valor</th>
+            <th class="p-2">Status</th>
+            <th class="p-2"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for nota in notas %}
+        <tr class="border-t">
+            <td class="p-2" data-label="Orçamento">
+                <a class="underline" href="/vendas/{{ nota.venda_id }}/nota">{{ nota.venda.numero_orcamento }}</a>
+            </td>
+            <td class="p-2" data-label="NFCe">{{ nota.numero or "-" }}{% if nota.serie %} / {{ nota.serie }}{% endif %}</td>
+            <td class="p-2" data-label="Data/Hora">{{ formatar_data_hora_local(nota.autorizado_em) or "-" }}</td>
+            <td class="p-2" data-label="Cliente">{{ nota.venda.cliente.nome }}</td>
+            <td class="p-2" data-label="Valor">R$ {{ "%.2f"|format(nota.venda.valor_total) }}</td>
+            <td class="p-2" data-label="Status">{{ nota.status.value }}</td>
+            <td class="p-2" {% if nota.chave_acesso %}data-label="Ações"{% endif %}>
+                {% if nota.chave_acesso %}
+                <a href="/vendas/{{ nota.venda_id }}/nota/danfe" target="_blank" class="text-slate-600 underline">Imprimir</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not notas %}
+        <tr class="border-t">
+            <td class="p-2 text-slate-500" colspan="7">
+                {% if filtro_cliente or filtro_data %}
+                Nenhuma nota fiscal encontrada para esse filtro.
+                {% else %}
+                Nenhuma nota fiscal emitida ainda.
+                {% endif %}
+            </td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

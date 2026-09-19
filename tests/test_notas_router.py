@@ -197,17 +197,31 @@ def test_emitir_nota_marca_provedor_a_partir_do_nome_provedor_do_provider(
     no banco. Confirma que `emitir_nota` grava `provedor` a partir do
     atributo `NOME_PROVEDOR` do provider ativo quando ele existe, e mantém o
     default para providers que não o declaram (ex.: `FiscalProviderFalso`,
-    usado nos demais testes deste arquivo)."""
+    usado nos demais testes deste arquivo).
+
+    Usa duas vendas distintas (uma por provider) em vez de emitir duas vezes
+    para a mesma venda -- depois do achado da auditoria geral (ver teste
+    `test_emitir_nota_ja_autorizada_e_bloqueado...`), emitir de novo para uma
+    venda que já tem nota com chave de acesso é bloqueado de propósito."""
     client, _ = authed_client_com_provider_falso
     client.post(f"/vendas/{venda_paga.id}/nota/emitir")
     nota = db_session.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_paga.id).first()
     assert nota.provedor == "focus_nfe"  # default do model, provider fake não declara NOME_PROVEDOR
 
-    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoComNomeProvedor()
-    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+    cliente = clientes_service.garantir_consumidor_final(db_session)
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="9", nome="Suco", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("5.00"), estoque_atual=Decimal("5"),
+    )
+    outra_venda = vendas_service.criar_venda(db_session, cliente.id)
+    vendas_service.adicionar_item(db_session, outra_venda.id, produto.id, Decimal("1"))
+    parcelas_service.confirmar_venda(db_session, outra_venda.id, Decimal("5.00"))
 
-    db_session.refresh(nota)
-    assert nota.provedor == "sefaz_direto"
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoComNomeProvedor()
+    client.post(f"/vendas/{outra_venda.id}/nota/emitir")
+
+    outra_nota = db_session.query(NotaFiscal).filter(NotaFiscal.venda_id == outra_venda.id).first()
+    assert outra_nota.provedor == "sefaz_direto"
 
 
 def test_emitir_nota_grava_dados_retornados_pelo_provedor(authed_client_com_provider_falso, venda_paga):
@@ -221,6 +235,27 @@ def test_emitir_nota_grava_dados_retornados_pelo_provedor(authed_client_com_prov
     pagina = client.get(f"/vendas/{venda_paga.id}/nota")
     assert "autorizada" in pagina.text
     assert "https://exemplo.com/danfe/1" in pagina.text
+
+
+def test_emitir_nota_ja_autorizada_e_bloqueado_nao_emite_uma_segunda_nota_real(
+    authed_client_com_provider_falso, venda_paga
+):
+    """Achado da auditoria geral: nada impedia um duplo-post (duplo clique,
+    F5 num form, retry de rede) de chamar `emitir_nota` outra vez para uma
+    venda que já tinha nota autorizada -- o `SefazDiretoProvider` real
+    trataria isso como uma emissão nova de verdade (número novo, XML novo),
+    criando uma segunda NFC-e real pra mesma venda. A tela só escondia o
+    botão, o que não protege contra um post direto na rota."""
+    client, provider_falso = authed_client_com_provider_falso
+    primeira = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
+    assert primeira.status_code == 303
+    assert provider_falso.emitidas == [venda_paga.id]
+
+    segunda = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
+
+    assert segunda.status_code == 400
+    assert "segunda nota fiscal real" in segunda.text
+    assert provider_falso.emitidas == [venda_paga.id]  # não chamou o provedor de novo
 
 
 def test_cancelar_nota_chama_provedor_com_motivo(authed_client_com_provider_falso, venda_paga):
@@ -285,6 +320,164 @@ def test_cancelar_nota_com_provedor_sem_suporte_retorna_erro_limpo(authed_client
     assert "ainda não está disponível" in response.text
 
 
+def test_listar_notas_mostra_notas_emitidas_com_link_de_impressao(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    response = client.get("/vendas/notas")
+
+    assert response.status_code == 200
+    assert str(venda_paga.numero_orcamento) in response.text
+    assert "autorizada" in response.text
+    assert f'href="/vendas/{venda_paga.id}/nota/danfe"' in response.text
+
+
+def test_listar_notas_sem_chave_de_acesso_nao_mostra_link_de_impressao(
+    authed_client_com_provider_falso, venda_paga
+):
+    client, _ = authed_client_com_provider_falso
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoRejeitando()
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    response = client.get("/vendas/notas")
+
+    assert response.status_code == 200
+    assert f'href="/vendas/{venda_paga.id}/nota/danfe"' not in response.text
+
+
+def test_listar_notas_vazia_mostra_mensagem(authed_client_com_provider_falso):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get("/vendas/notas")
+
+    assert response.status_code == 200
+    assert "Nenhuma nota fiscal emitida ainda." in response.text
+
+
+def test_listar_notas_mostra_data_hora_convertida_para_brasilia(
+    authed_client_com_provider_falso, venda_paga, db_session
+):
+    from datetime import datetime
+
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    nota = db_session.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_paga.id).first()
+    nota.autorizado_em = datetime(2026, 9, 18, 14, 30)
+    db_session.commit()
+
+    response = client.get("/vendas/notas")
+
+    assert "18/09/2026 11:30" in response.text
+    assert "14:30" not in response.text
+
+
+def test_listar_notas_filtra_por_cliente(authed_client_com_provider_falso, venda_paga, db_session):
+    from app.models.cliente import TipoPessoa
+    from app.services import clientes_service, parcelas_service, produtos_service, vendas_service
+
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")  # cliente "AO CONSUMIDOR"
+
+    outro_cliente = clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PF, nome="Carlos Pereira")
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="9", nome="Suco", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("5.00"), estoque_atual=Decimal("5"),
+    )
+    outra_venda = vendas_service.criar_venda(db_session, outro_cliente.id)
+    vendas_service.adicionar_item(db_session, outra_venda.id, produto.id, Decimal("1"))
+    parcelas_service.confirmar_venda(db_session, outra_venda.id, Decimal("5.00"))
+    client.post(f"/vendas/{outra_venda.id}/nota/emitir")
+
+    response = client.get("/vendas/notas", params={"cliente": "Carlos"})
+
+    assert response.status_code == 200
+    assert "Carlos Pereira" in response.text
+    assert "AO CONSUMIDOR" not in response.text
+
+
+def test_listar_notas_com_data_invalida_retorna_400(authed_client_com_provider_falso):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get("/vendas/notas", params={"data": "não-é-uma-data"})
+
+    assert response.status_code == 400
+
+
+def test_listar_notas_mantem_filtro_preenchido_no_formulario(authed_client_com_provider_falso):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get("/vendas/notas", params={"cliente": "Carlos", "data": "2026-09-18"})
+
+    assert response.status_code == 200
+    assert 'value="Carlos"' in response.text
+    assert 'value="2026-09-18"' in response.text
+    assert "Limpar filtro" in response.text
+
+
+def test_pagina_da_nota_nao_menciona_mais_sebrae(authed_client_com_provider_falso, venda_paga):
+    """Regressão: a tela chegou a mostrar, como caminho principal, um resumo
+    "pra digitar no Emissor Gratuito do SEBRAE" com um link externo -- resto
+    de uma versão anterior do sistema, de antes da integração direta com a
+    Sefaz existir. O caminho principal agora é sempre emitir direto."""
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert "SEBRAE" not in response.text
+    assert "sebrae.com.br" not in response.text
+
+
+def test_pagina_da_nota_promove_gerar_cupom_fiscal_como_acao_principal(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert response.status_code == 200
+    assert "Resumo da venda" in response.text
+    assert "Gerar Cupom Fiscal" in response.text
+    assert f'action="/vendas/{venda_paga.id}/nota/emitir"' in response.text
+    assert f'href="/vendas/{venda_paga.id}"' in response.text  # botão Voltar
+
+
+def test_pagina_da_nota_antes_de_emitir_nao_oferece_excluir_e_aponta_para_orcamentos(
+    authed_client_com_provider_falso, venda_paga
+):
+    """A exclusão de uma venda ainda não faturada agora se faz na tela
+    separada de Orçamentos, não misturada com as ações de emissão fiscal
+    -- ver /vendas/orcamentos."""
+    client, _ = authed_client_com_provider_falso
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert response.status_code == 200
+    assert f'action="/vendas/{venda_paga.id}/excluir"' not in response.text
+    assert 'href="/vendas/orcamentos"' in response.text
+
+
+def test_pagina_da_nota_autorizada_explica_que_nao_pode_mais_excluir(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert response.status_code == 200
+    assert f'action="/vendas/{venda_paga.id}/excluir"' not in response.text
+    assert "não pode mais ser excluída" in response.text
+    assert "Cancelar nota" in response.text
+
+
+def test_pagina_da_nota_mostra_bandeira_quando_pagamento_em_cartao(authed_client_com_provider_falso, venda_paga, db_session):
+    client, _ = authed_client_com_provider_falso
+    venda_paga.forma_pagamento = "cartao_credito"
+    venda_paga.bandeira = "06"
+    db_session.commit()
+
+    response = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert "Elo" in response.text
+
+
 def test_pagina_da_nota_mostra_as_parcelas_geradas(authed_client_com_provider_falso, venda_paga):
     client, _ = authed_client_com_provider_falso
 
@@ -342,14 +535,18 @@ def test_marcar_nota_emitida_manualmente_em_venda_nao_paga_retorna_400(authed_cl
     assert response.status_code == 400
 
 
-def test_ver_danfe_com_nota_autorizada_mostra_qrcode(authed_client_com_provider_falso, venda_paga):
+def test_ver_danfe_com_nota_autorizada_devolve_pdf(authed_client_com_provider_falso, venda_paga):
+    """Regressão: a tela do cupom era uma página HTML dentro do próprio site
+    (herdando o menu/nav do app) -- agora é um PDF de verdade, aberto
+    diretamente pelo navegador, igual ao DANFE do sistema anterior."""
     client, _ = authed_client_com_provider_falso
     client.post(f"/vendas/{venda_paga.id}/nota/emitir")
 
     response = client.get(f"/vendas/{venda_paga.id}/nota/danfe")
 
     assert response.status_code == 200
-    assert "data:image/png;base64," in response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
 
 
 def test_ver_danfe_sem_nota_autorizada_retorna_404(authed_client_com_provider_falso, venda_paga):

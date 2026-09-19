@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -6,18 +7,27 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
+from app.constants import BANDEIRAS_CARTAO, FORMAS_PAGAMENTO_COM_BANDEIRA
 from app.database import get_db
+from app.models.cliente import Cliente
 from app.models.usuario import Usuario
 from app.models.venda import StatusVenda, Venda, VendaItem
-from app.services import clientes_service, parcelas_service, vendas_service
+from app.services import clientes_service, parcelas_service, produtos_service, vendas_service
 
 router = APIRouter(prefix="/vendas")
 templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/nova", response_class=HTMLResponse)
-def nova_form(request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
-    cliente_padrao = clientes_service.garantir_consumidor_final(db)
+def nova_form(
+    request: Request,
+    cliente_id: int | None = None,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    cliente_padrao = db.get(Cliente, cliente_id) if cliente_id else None
+    if cliente_padrao is None:
+        cliente_padrao = clientes_service.garantir_consumidor_final(db)
     return templates.TemplateResponse("vendas/nova.html", {"request": request, "cliente_padrao": cliente_padrao})
 
 
@@ -27,10 +37,26 @@ def criar(cliente_id: int = Form(...), db: Session = Depends(get_db), usuario: U
     return RedirectResponse(url=f"/vendas/{venda.id}", status_code=303)
 
 
+@router.get("/orcamentos", response_class=HTMLResponse)
+def listar_orcamentos(request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    orcamentos = vendas_service.listar_orcamentos(db)
+    return templates.TemplateResponse("vendas/orcamentos_list.html", {"request": request, "orcamentos": orcamentos})
+
+
 @router.get("/{venda_id}", response_class=HTMLResponse)
 def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     venda = db.get(Venda, venda_id)
-    return templates.TemplateResponse("vendas/detalhe.html", {"request": request, "venda": venda})
+    produtos = produtos_service.listar_produtos_ativos(db)
+    produtos_json = json.dumps(
+        [
+            {"id": produto.id, "codigo": produto.codigo_interno, "nome": produto.nome, "preco": str(produto.preco_venda)}
+            for produto in produtos
+        ]
+    ).replace("</", "<\\/")  # nunca fechar a tag <script> se um nome de produto contiver "</..."
+    return templates.TemplateResponse(
+        "vendas/detalhe.html",
+        {"request": request, "venda": venda, "produtos": produtos, "produtos_json": produtos_json},
+    )
 
 
 @router.post("/{venda_id}/itens", response_class=HTMLResponse)
@@ -90,7 +116,9 @@ def remover_item(item_id: int, request: Request, db: Session = Depends(get_db), 
 @router.get("/{venda_id}/pagamento", response_class=HTMLResponse)
 def pagamento_form(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     venda = db.get(Venda, venda_id)
-    return templates.TemplateResponse("vendas/pagamento.html", {"request": request, "venda": venda})
+    return templates.TemplateResponse(
+        "vendas/pagamento.html", {"request": request, "venda": venda, "bandeiras": BANDEIRAS_CARTAO}
+    )
 
 
 @router.post("/{venda_id}/pagamento")
@@ -99,6 +127,7 @@ def confirmar_pagamento(
     forma_pagamento: str = Form(...),
     numero_parcelas: int = Form(1),
     valor_pago: str = Form(...),
+    bandeira: str = Form(""),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
@@ -107,6 +136,9 @@ def confirmar_pagamento(
     except InvalidOperation:
         raise HTTPException(status_code=400, detail="Valor pago inválido")
 
+    if forma_pagamento in FORMAS_PAGAMENTO_COM_BANDEIRA and not bandeira.strip():
+        raise HTTPException(status_code=400, detail="Selecione a bandeira do cartão")
+
     venda = db.get(Venda, venda_id)
     if venda is None:
         raise HTTPException(status_code=400, detail="Venda não encontrada")
@@ -114,8 +146,17 @@ def confirmar_pagamento(
         raise HTTPException(status_code=400, detail="Venda já foi confirmada ou cancelada")
 
     try:
-        parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas)
+        parcelas_service.gerar_parcelas(db, venda_id, forma_pagamento, numero_parcelas, bandeira=bandeira or None)
         parcelas_service.confirmar_venda(db, venda_id, valor_pago_decimal)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
+
+
+@router.post("/{venda_id}/excluir")
+def excluir(venda_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    try:
+        vendas_service.cancelar_venda(db, venda_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return RedirectResponse(url="/vendas/orcamentos", status_code=303)

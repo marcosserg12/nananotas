@@ -5,36 +5,90 @@
 <p class="text-slate-600 mb-4">Cliente: {{ venda.cliente.nome }} — Status: {{ venda.status.value }}</p>
 
 <div class="bg-white p-4 rounded shadow mb-4 relative">
-    <h2 class="font-semibold mb-2">Adicionar produto</h2>
-    <form hx-post="/vendas/{{ venda.id }}/itens" hx-target="#itens-venda" hx-swap="outerHTML" class="flex flex-wrap gap-2 items-end">
-        <div class="relative">
-            <label class="block text-sm">Produto</label>
-            <input type="text" id="produto_busca" hx-get="/produtos/buscar" hx-trigger="keyup changed delay:300ms"
-                   hx-target="#resultado_busca" name="termo" class="border rounded px-3 py-2" autocomplete="off">
-            <input type="hidden" id="produto_id" name="produto_id">
-            <div id="resultado_busca" class="absolute z-10"></div>
+    <h2 class="font-semibold mb-3">Adicionar produto</h2>
+    <form hx-post="/vendas/{{ venda.id }}/itens" hx-target="#itens-venda" hx-swap="outerHTML"
+          class="grid grid-cols-1 sm:grid-cols-[2fr_110px_150px_auto] gap-3 items-end">
+        <div>
+            <label class="block text-sm mb-1">Produto</label>
+            <input type="text" id="produto_texto" list="produtos_datalist" placeholder="Código ou nome do produto..."
+                   autocomplete="off" class="border rounded px-3 py-2 w-full" oninput="selecionarProdutoPorTexto(this.value)">
+            <datalist id="produtos_datalist">
+                {% for produto in produtos %}
+                <option value="{{ produto.codigo_interno }} - {{ produto.nome }}"></option>
+                {% endfor %}
+            </datalist>
+            <input type="hidden" name="produto_id" id="produto_id">
         </div>
         <div>
-            <label class="block text-sm">Quantidade</label>
-            <input type="text" name="quantidade" value="1" class="border rounded px-3 py-2 w-24">
+            <label class="block text-sm mb-1">Quantidade</label>
+            <input type="text" name="quantidade" value="1" class="border rounded px-3 py-2 w-full">
         </div>
         <div>
-            <label class="block text-sm">Preço unitário</label>
-            <input type="text" id="preco_unitario_input" name="preco_unitario" placeholder="Preço de cadastro" class="border rounded px-3 py-2 w-28">
+            <label class="block text-sm mb-1">Preço unitário</label>
+            <input type="text" id="preco_unitario_input" name="preco_unitario" placeholder="Preço de cadastro" class="border rounded px-3 py-2 w-full">
         </div>
-        <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Adicionar</button>
+        <button type="submit" class="bg-slate-800 text-white px-4 py-2.5 rounded font-medium w-full sm:w-auto">Adicionar</button>
     </form>
 </div>
 
 {% include "vendas/_itens.html" %}
 
 {% if venda.status.value == "orcamento" %}
-<a href="/vendas/{{ venda.id }}/pagamento" class="inline-block mt-4 bg-emerald-700 text-white px-4 py-2 rounded">
-    Ir para pagamento
-</a>
+<div class="flex flex-col sm:flex-row gap-2 mt-4">
+    <a href="/vendas/{{ venda.id }}/pagamento" class="text-center bg-emerald-700 text-white px-4 py-3 rounded font-bold text-lg">
+        Ir para pagamento
+    </a>
+    <form method="post" action="/vendas/{{ venda.id }}/excluir" onsubmit="return confirm('Excluir este orçamento? Essa ação não pode ser desfeita.');">
+        <button type="submit" class="w-full bg-red-700 text-white px-4 py-3 rounded font-medium">Excluir orçamento</button>
+    </form>
+</div>
 {% else %}
-<a href="/vendas/{{ venda.id }}/nota" class="inline-block mt-4 bg-emerald-700 text-white px-4 py-2 rounded">
+<a href="/vendas/{{ venda.id }}/nota" class="block text-center mt-4 bg-emerald-700 text-white px-4 py-3 rounded font-bold text-lg">
     Ver nota fiscal
 </a>
 {% endif %}
+<script>
+    var PRODUTOS = {{ produtos_json|safe }};
+
+    function obterTokenCodigo(texto) {
+        var indice = texto.indexOf(" - ");
+        return (indice === -1 ? texto : texto.slice(0, indice)).trim();
+    }
+
+    function selecionarProdutoPorTexto(texto) {
+        var produtoIdInput = document.getElementById("produto_id");
+        var precoInput = document.getElementById("preco_unitario_input");
+        var textoLimpo = texto.trim();
+        var tokenCodigo = obterTokenCodigo(textoLimpo);
+
+        // Se o que foi digitado (ou o trecho antes do " - ") bate exatamente
+        // com o código de algum produto, preenche na hora -- não precisa
+        // nem terminar de digitar o nome.
+        var produto = PRODUTOS.find(function (p) {
+            return p.codigo.toUpperCase() === tokenCodigo.toUpperCase();
+        });
+
+        // Senão, procura pelo nome -- só assume o produto se a busca for
+        // específica o bastante pra sobrar um único resultado; com mais de
+        // um, o usuário ainda está digitando/escolhendo na lista nativa.
+        if (!produto && textoLimpo) {
+            var candidatos = PRODUTOS.filter(function (p) {
+                return p.nome.toUpperCase().indexOf(textoLimpo.toUpperCase()) !== -1;
+            });
+            if (candidatos.length === 1) {
+                produto = candidatos[0];
+            }
+        }
+
+        produtoIdInput.value = produto ? produto.id : "";
+        if (produto) {
+            // Preenche com "0", não com o preço de cadastro -- o vendedor
+            // digita o preço de verdade a cada venda. Preencher com o preço
+            // de cadastro escondia o fato de que os preços cadastrados hoje
+            // são só um placeholder (R$ 0,01), e um vendedor sem atenção
+            // podia cobrar esse valor por engano sem perceber.
+            precoInput.value = "0";
+        }
+    }
+</script>
 {% endblock %}

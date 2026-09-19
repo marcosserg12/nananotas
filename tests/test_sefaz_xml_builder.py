@@ -351,6 +351,139 @@ def test_montar_nfce_xml_em_producao_usa_a_descricao_real_do_produto(db_session,
     assert x_prod.text == "Lanche"
 
 
+def test_montar_nfce_xml_inclui_bandeira_do_cartao_quando_informada(db_session):
+    venda = _venda_com_item(db_session)
+    venda.forma_pagamento = "cartao_credito"
+    venda.bandeira = "06"
+    db_session.commit()
+    db_session.refresh(venda)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    card = raiz.find(".//nfe:pag/nfe:detPag/nfe:card", NS)
+    assert card is not None
+    assert card.find("nfe:tBand", NS).text == "06"
+    assert card.find("nfe:tpIntegra", NS).text == "2"
+
+
+def test_montar_nfce_xml_omite_card_quando_bandeira_nao_informada(db_session):
+    venda = _venda_com_item(db_session)
+    venda.forma_pagamento = "cartao_credito"
+    db_session.commit()
+    db_session.refresh(venda)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    assert raiz.find(".//nfe:pag/nfe:detPag/nfe:card", NS) is None
+
+
+def test_montar_nfce_xml_omite_card_para_dinheiro_mesmo_com_bandeira_gravada(db_session):
+    """`bandeira` só deve virar `card` no XML quando a forma de pagamento é
+    efetivamente cartão -- uma venda paga em dinheiro nunca deveria ter
+    bandeira, mas o teste protege contra dado inconsistente no banco."""
+    venda = _venda_com_item(db_session)
+    venda.forma_pagamento = "dinheiro"
+    venda.bandeira = "06"
+    db_session.commit()
+    db_session.refresh(venda)
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    assert raiz.find(".//nfe:pag/nfe:detPag/nfe:card", NS) is None
+
+
+def test_montar_nfce_xml_inclui_enderdest_para_cliente_em_brasilia_df(db_session):
+    cliente = Cliente(
+        tipo_pessoa=TipoPessoa.PF,
+        nome="Fulano de Tal",
+        cpf_cnpj="11144477735",
+        consumidor_final=False,
+        endereco_logradouro="Rua das Flores",
+        endereco_numero="123",
+        endereco_bairro="Asa Sul",
+        endereco_cidade="Brasília",
+        endereco_uf="DF",
+        endereco_cep="70000000",
+    )
+    db_session.add(cliente)
+    db_session.commit()
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="2", nome="Suco", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("1"))
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    ender_dest = raiz.find(".//nfe:dest/nfe:enderDest", NS)
+    assert ender_dest is not None
+    assert ender_dest.find("nfe:xLgr", NS).text == "Rua das Flores"
+    assert ender_dest.find("nfe:cMun", NS).text == "5300108"
+    assert ender_dest.find("nfe:UF", NS).text == "DF"
+
+
+def test_montar_nfce_xml_omite_enderdest_para_cliente_fora_de_brasilia(db_session):
+    """Não fabricamos um código IBGE de município a partir do que a
+    BrasilAPI devolve (código TOM da Receita, numeração diferente) -- ver
+    docstring de `xml_builder._montar_ender_dest`. Fora de Brasília-DF, o
+    grupo `enderDest` fica de fora (opcional no schema), mas `Dest`
+    continua sendo montado normalmente com CPF/CNPJ e nome."""
+    cliente = Cliente(
+        tipo_pessoa=TipoPessoa.PF,
+        nome="Fulano de Tal",
+        cpf_cnpj="11144477735",
+        consumidor_final=False,
+        endereco_logradouro="Rua X",
+        endereco_numero="1",
+        endereco_bairro="Centro",
+        endereco_cidade="São Paulo",
+        endereco_uf="SP",
+    )
+    db_session.add(cliente)
+    db_session.commit()
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="2", nome="Suco", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("1"))
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    assert raiz.find(".//nfe:dest", NS) is not None
+    assert raiz.find(".//nfe:dest/nfe:enderDest", NS) is None
+
+
+def test_montar_nfce_xml_dest_isento_usa_indiedest_2(db_session):
+    cliente = Cliente(
+        tipo_pessoa=TipoPessoa.PJ,
+        nome="Empresa Isenta",
+        cpf_cnpj="11222333000181",
+        tipo_inscricao_estadual="isento",
+        consumidor_final=False,
+    )
+    db_session.add(cliente)
+    db_session.commit()
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="2", nome="Suco", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("10.00"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("1"))
+
+    xml_texto = xml_builder.montar_nfce_xml(venda, numero=1, serie=1)
+
+    raiz = ElementTree.fromstring(xml_texto)
+    ind_ie_dest = raiz.find(".//nfe:dest/nfe:indIEDest", NS)
+    assert ind_ie_dest.text == "2"
+
+
 def test_montar_nfce_xml_nao_tem_espacos_ou_quebras_de_linha_entre_as_tags(db_session):
     """Regra confirmada em teste real contra a SVRS: 'não é permitida a
     presença de caracteres de edição no início/fim da mensagem ou entre as

@@ -22,6 +22,7 @@ class Venda(Base):
     data_venda = Column(DateTime, nullable=False, default=datetime.utcnow)
     status = Column(Enum(StatusVenda), nullable=False, default=StatusVenda.ORCAMENTO)
     forma_pagamento = Column(String(30), nullable=True)
+    bandeira = Column(String(2), nullable=True)
     valor_total = Column(Numeric(10, 2), nullable=False, default=0)
     valor_pago = Column(Numeric(10, 2), nullable=True)
     troco = Column(Numeric(10, 2), nullable=True)

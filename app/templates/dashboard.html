@@ -1,12 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Painel - Nana Lanches{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-1">Bem-vindo, {{ usuario.username }}</h1>
-<p class="text-slate-600 mb-6">Vendas de hoje: {{ vendas|length }} — Total: R$ {{ "%.2f"|format(total) }}</p>
+<div class="flex flex-wrap justify-between items-end gap-3 mb-6">
+    <div>
+        <h1 class="text-4xl mb-1">Bem-vindo, {{ usuario.username }}</h1>
+        <p class="text-slate-500">Aqui está o resumo do movimento de hoje.</p>
+    </div>
+    <a href="/vendas/nova" class="inline-flex items-center gap-2 bg-brand-500 text-white px-5 py-2.5 rounded font-medium">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>
+        Nova Venda
+    </a>
+</div>
 
-<a href="/vendas/nova" class="inline-block mb-4 bg-emerald-700 text-white px-4 py-2 rounded">+ Nova Venda</a>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded shadow p-5 border-t-4 border-brand-500">
+        <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Vendas hoje</p>
+        <p class="text-4xl font-semibold">{{ vendas|length }}</p>
+    </div>
+    <div class="bg-white rounded shadow p-5 border-t-4 border-slate-800">
+        <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Faturamento hoje</p>
+        <p class="text-4xl font-semibold">R$ {{ "%.2f"|format(total) }}</p>
+    </div>
+    <div class="bg-white rounded shadow p-5 border-t-4 border-brand-700">
+        <p class="text-xs uppercase tracking-wide text-slate-500 mb-1">Ticket médio</p>
+        <p class="text-4xl font-semibold">R$ {{ "%.2f"|format(total / vendas|length) if vendas else "0.00" }}</p>
+    </div>
+</div>
 
-<table class="w-full bg-white rounded shadow overflow-hidden">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <div class="bg-white rounded shadow p-5">
+        <h2 class="text-lg font-semibold mb-3">Vendas da semana</h2>
+        <div style="height: 260px;"><canvas id="grafico-semana"></canvas></div>
+    </div>
+    <div class="bg-white rounded shadow p-5">
+        <h2 class="text-lg font-semibold mb-3">Vendas dos últimos meses</h2>
+        <div style="height: 260px;"><canvas id="grafico-meses"></canvas></div>
+    </div>
+</div>
+
+<h2 class="text-lg font-semibold mb-2">Vendas de hoje</h2>
+<div class="bg-white rounded shadow overflow-hidden tabela-scroll">
+<table class="w-full">
     <thead class="bg-slate-100 text-left">
         <tr>
             <th class="p-2">Orçamento</th>
@@ -18,12 +52,80 @@
     <tbody>
         {% for venda in vendas %}
         <tr class="border-t">
-            <td class="p-2"><a class="underline" href="/vendas/{{ venda.id }}">{{ venda.numero_orcamento }}</a></td>
-            <td class="p-2">{{ venda.cliente.nome }}</td>
-            <td class="p-2">{{ venda.data_venda.strftime("%H:%M") }}</td>
-            <td class="p-2">R$ {{ "%.2f"|format(venda.valor_total) }}</td>
+            <td class="p-2" data-label="Orçamento"><a class="underline" href="/vendas/{{ venda.id }}">{{ venda.numero_orcamento }}</a></td>
+            <td class="p-2" data-label="Cliente">{{ venda.cliente.nome }}</td>
+            <td class="p-2" data-label="Hora">{{ venda.hora_local }}</td>
+            <td class="p-2" data-label="Total">R$ {{ "%.2f"|format(venda.valor_total) }}</td>
         </tr>
         {% endfor %}
+        {% if not vendas %}
+        <tr class="border-t">
+            <td class="p-2 text-slate-500" colspan="4">Nenhuma venda ainda hoje.</td>
+        </tr>
+        {% endif %}
     </tbody>
 </table>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<script>
+    (function () {
+        var semana = {{ grafico_semana_json|safe }};
+        var meses = {{ grafico_meses_json|safe }};
+
+        var corGrade = "rgba(24, 21, 19, .08)";
+        var corTexto = "#4A4442";
+        Chart.defaults.font.family = "'Public Sans', ui-sans-serif, sans-serif";
+        Chart.defaults.font.size = 15;
+        Chart.defaults.color = corTexto;
+
+        function corBarras(dados) {
+            return dados.map(function (item, indice) {
+                return indice === dados.length - 1 ? "#181513" : "#C8102E";
+            });
+        }
+
+        function opcoes() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#181513",
+                        padding: 10,
+                        titleFont: { weight: "600" },
+                        callbacks: {
+                            label: function (contexto) {
+                                return "R$ " + contexto.parsed.y.toFixed(2).replace(".", ",");
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: corGrade }, border: { display: false } },
+                    x: { grid: { display: false }, border: { display: false } },
+                },
+            };
+        }
+
+        new Chart(document.getElementById("grafico-semana"), {
+            type: "bar",
+            data: {
+                labels: semana.map(function (d) { return d.label; }),
+                datasets: [{ data: semana.map(function (d) { return d.total; }), backgroundColor: corBarras(semana), borderRadius: 5, maxBarThickness: 34 }],
+            },
+            options: opcoes(),
+        });
+
+        new Chart(document.getElementById("grafico-meses"), {
+            type: "bar",
+            data: {
+                labels: meses.map(function (d) { return d.label; }),
+                datasets: [{ data: meses.map(function (d) { return d.total; }), backgroundColor: corBarras(meses), borderRadius: 5, maxBarThickness: 40 }],
+            },
+            options: opcoes(),
+        });
+    })();
+</script>
 {% endblock %}

@@ -4,21 +4,303 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Nana Lanches{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        document.addEventListener("click", function (event) {
-            var produtoItem = event.target.closest("[data-produto-select]");
-            if (produtoItem) {
-                document.getElementById("produto_id").value = produtoItem.dataset.produtoId;
-                document.getElementById("produto_busca").value = produtoItem.dataset.produtoLabel;
-                document.getElementById("resultado_busca").innerHTML = "";
-                var precoInput = document.getElementById("preco_unitario_input");
-                if (precoInput) {
-                    precoInput.value = produtoItem.dataset.produtoPreco;
-                }
-                return;
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            50: '#F7F6F5', 100: '#EDEBE9', 200: '#D9D5D1',
+                            500: '#6B6461', 600: '#4A4442', 700: '#2E2A28', 800: '#181513',
+                        },
+                        red: { 600: '#9E1B2B', 700: '#7A1220' },
+                        emerald: { 700: '#1F6B41' },
+                        amber: { 700: '#9A5B00' },
+                        brand: { 50: '#FDECEC', 100: '#FBD3D5', 300: '#EC7F86', 500: '#C8102E', 600: '#A80D26', 700: '#7E0A1D', 900: '#3D0510' },
+                    },
+                    fontFamily: {
+                        display: ["Bebas Neue", "ui-sans-serif", "sans-serif"],
+                        sans: ["Public Sans", "ui-sans-serif", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        :root {
+            --brand: #C8102E;
+            --ink: #181513;
+            --shadow-warm: 0 1px 2px rgba(24, 21, 19, .06), 0 12px 26px -14px rgba(24, 21, 19, .3);
+        }
+
+        /* Base de leitura bem maior em todo o site -- pedido explícito por
+           conta de baixa visão de quem usa o sistema no dia a dia. Como
+           todas as classes do Tailwind (texto, espaçamento, ícones em rem)
+           são relativas ao tamanho da fonte do <html>, aumentar aqui
+           escala o site inteiro de uma vez -- textos, botões, campos e
+           cartões -- em vez de ter que aumentar cada tela na mão. */
+        html {
+            font-size: 130%;
+        }
+        @media (max-width: 480px) {
+            /* Em telas bem estreitas, 130% pode forçar quebras de linha
+               demais nos botões -- 122% ainda é bem maior que o padrão,
+               mas sobra mais espaço horizontal pros elementos. */
+            html { font-size: 122%; }
+        }
+
+        body {
+            font-family: 'Public Sans', ui-sans-serif, sans-serif;
+            background-color: #FAFAF9;
+            position: relative;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Bebas Neue', ui-sans-serif, sans-serif;
+            letter-spacing: .01em;
+        }
+
+        main {
+            position: relative;
+            z-index: 1;
+            animation: subir .5s ease both;
+        }
+
+        @keyframes subir {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .rounded { border-radius: .6rem !important; }
+        .shadow { box-shadow: var(--shadow-warm) !important; border: 1px solid rgba(24, 21, 19, .07); }
+
+        thead th {
+            text-transform: uppercase;
+            font-size: .82rem;
+            letter-spacing: .06em;
+            font-weight: 700;
+            color: #4A4442;
+        }
+
+        tbody tr { transition: background-color .12s ease; }
+        tbody tr:hover { background-color: #FDECEC; }
+
+        /* Tabelas nunca "quebram" o layout no celular. Em telas largas
+           ainda tem o scroll horizontal de segurança (`overflow-x`), mas o
+           de verdade é abaixo: em telas estreitas a tabela vira uma lista
+           de cartões, uma linha por cartão, cada valor com o nome da coluna
+           do lado -- lê muito melhor que rolar de lado tentando comparar
+           colunas cortadas, especialmente pra quem tem dificuldade de
+           leitura na tela pequena. */
+        .tabela-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 640px) {
+            .tabela-scroll table { width: 100%; }
+            .tabela-scroll thead { display: none; }
+            .tabela-scroll tbody, .tabela-scroll tr, .tabela-scroll td {
+                display: block;
+                width: 100%;
             }
+            .tabela-scroll tr {
+                border-bottom: 1px solid #EDEBE9;
+                padding: .5rem 0;
+            }
+            .tabela-scroll tr:first-child { border-top: 1px solid #EDEBE9; }
+            .tabela-scroll td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: .75rem;
+                padding: .3rem .9rem;
+                border: none !important;
+                text-align: right;
+            }
+            .tabela-scroll td[data-label]::before {
+                content: attr(data-label);
+                font-weight: 700;
+                font-size: .72rem;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+                color: #6B6461;
+                text-align: left;
+                margin-right: .75rem;
+                flex-shrink: 0;
+            }
+        }
+
+        input[type="text"], input[type="password"], input[type="date"],
+        input[type="email"], input[type="number"], select, textarea {
+            transition: border-color .15s ease, box-shadow .15s ease;
+            background-color: #FFFFFF;
+            font-size: 1rem;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #C8102E !important;
+            box-shadow: 0 0 0 3px rgba(200, 16, 46, .16);
+        }
+
+        button, .btn, a.inline-block, a.inline-flex {
+            font-size: 1rem;
+        }
+
+        a[class*="bg-"], button[class*="bg-"] {
+            transition: transform .12s ease, box-shadow .2s ease, filter .15s ease;
+        }
+        a[class*="bg-"]:hover, button[class*="bg-"]:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 8px 20px -8px rgba(24, 21, 19, .4);
+        }
+        a[class*="bg-"]:active, button[class*="bg-"]:active { transform: translateY(1px); }
+
+        .marca {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.9rem;
+            letter-spacing: .04em;
+            line-height: 1;
+        }
+
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            padding: .55rem .85rem;
+            border-radius: .5rem;
+            color: rgba(255, 255, 255, .88);
+            transition: background-color .15s ease, color .15s ease;
+            font-size: 1.05rem;
+            font-weight: 500;
+        }
+        .nav-link:hover { color: #FFFFFF; background-color: rgba(255, 255, 255, .12); }
+        .nav-link.ativo { color: #7E0A1D; background-color: #FFFFFF; }
+        .nav-link svg { flex-shrink: 0; }
+        .nav-link.w-full { justify-content: flex-start; }
+
+        /* Menu do celular: uma coluna só, empilhado, recolhido por padrão --
+           classe própria (não a `hidden`/`flex` do Tailwind) pra não ter
+           duas regras de `display` brigando pela mesma prioridade. */
+        #menu_nav {
+            display: none;
+            flex-direction: column;
+            align-items: stretch;
+            gap: .3rem;
+            margin-top: .85rem;
+        }
+        #menu_nav.aberto { display: flex; }
+        @media (min-width: 640px) {
+            #menu_nav {
+                display: flex !important;
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: .5rem;
+                margin-top: 0;
+            }
+        }
+
+        /* Botão flutuante de "Nova Venda" -- é a ação mais usada do sistema,
+           então fica sempre à mão, em qualquer tela, sem precisar rolar até
+           o menu -- especialmente importante no celular. */
+        .fab-nova-venda {
+            position: fixed;
+            right: 1.1rem;
+            bottom: 1.1rem;
+            z-index: 50;
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            background-color: #C8102E;
+            color: #FFFFFF;
+            padding: 1rem 1.4rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 1.05rem;
+            text-decoration: none;
+            box-shadow: 0 14px 28px -8px rgba(24, 21, 19, .5), 0 2px 8px rgba(24, 21, 19, .3);
+            transition: transform .15s ease, box-shadow .2s ease, filter .15s ease;
+        }
+        .fab-nova-venda:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .fab-nova-venda:active { transform: translateY(1px); }
+        .fab-nova-venda svg { flex-shrink: 0; }
+    </style>
+</head>
+<body class="text-slate-800">
+    {% if request.session.get("user_id") %}
+    {% set caminho = request.url.path %}
+    <nav class="bg-brand-500 px-4 sm:px-6 py-3">
+        <div class="flex items-center justify-between">
+            <span class="marca text-white">NANA LANCHES</span>
+            <button type="button" id="botao_menu" class="sm:hidden text-white p-1" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu_nav">
+                <svg id="icone_menu_abrir" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                <svg id="icone_menu_fechar" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
+        <div id="menu_nav">
+            <a href="/" class="nav-link {{ 'ativo' if caminho == '/' else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                Painel
+            </a>
+            <a href="/produtos" class="nav-link {{ 'ativo' if caminho.startswith('/produtos') else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.6 12.6 20.6a2 2 0 0 1-2.8 0l-6.4-6.4a2 2 0 0 1 0-2.8l8-8a2 2 0 0 1 1.4-.6H19a1.6 1.6 0 0 1 1.6 1.6v6.8a2 2 0 0 1-.6 1.4Z"/><circle cx="15" cy="9" r="1.4" fill="currentColor" stroke="none"/></svg>
+                Produtos
+            </a>
+            <a href="/clientes" class="nav-link {{ 'ativo' if caminho.startswith('/clientes') else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 19c.6-3 3-5 6.2-5s5.6 2 6.2 5"/><path d="M16.2 4.2c1.6.3 2.8 1.7 2.8 3.4s-1.2 3.1-2.8 3.4"/><path d="M18 14.3c1.9.5 3.4 1.9 3.8 4.2"/></svg>
+                Clientes
+            </a>
+            <a href="/vendas/nova" class="nav-link {{ 'ativo' if caminho == '/vendas/nova' else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>
+                Nova Venda
+            </a>
+            <a href="/vendas/orcamentos" class="nav-link {{ 'ativo' if caminho == '/vendas/orcamentos' else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 3v2h6V3M8 9h8M8 13h8M8 17h5"/></svg>
+                Orçamentos
+            </a>
+            <a href="/vendas/notas" class="nav-link {{ 'ativo' if caminho.startswith('/vendas/notas') else '' }}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M9 9h6M9 13h6M9 17h3.5"/></svg>
+                Notas Fiscais
+            </a>
+            <form method="post" action="/logout" class="sm:ml-auto">
+                <button type="submit" class="nav-link w-full sm:w-auto">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+                    Sair
+                </button>
+            </form>
+        </div>
+    </nav>
+    <script>
+        (function () {
+            var botao = document.getElementById("botao_menu");
+            var menu = document.getElementById("menu_nav");
+            var iconeAbrir = document.getElementById("icone_menu_abrir");
+            var iconeFechar = document.getElementById("icone_menu_fechar");
+            botao.addEventListener("click", function () {
+                var vaiAbrir = !menu.classList.contains("aberto");
+                menu.classList.toggle("aberto");
+                iconeAbrir.hidden = vaiAbrir;
+                iconeFechar.hidden = !vaiAbrir;
+                botao.setAttribute("aria-expanded", vaiAbrir ? "true" : "false");
+            });
+        })();
+    </script>
+    <a href="/vendas/nova" class="fab-nova-venda">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>
+        Nova Venda
+    </a>
+    {% endif %}
+    <main class="p-4 sm:p-6 max-w-6xl mx-auto" style="padding-bottom: 6rem;">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        document.addEventListener("click", function (event) {
             var clienteItem = event.target.closest("[data-cliente-select]");
             if (clienteItem) {
                 document.getElementById("cliente_id").value = clienteItem.dataset.clienteId;
@@ -27,22 +309,5 @@
             }
         });
     </script>
-</head>
-<body class="bg-gray-50 text-gray-900">
-    {% if request.session.get("user_id") %}
-    <nav class="bg-slate-800 text-white px-4 py-3 flex flex-wrap gap-4 items-center">
-        <span class="font-bold">Nana Lanches</span>
-        <a href="/" class="hover:underline">Painel</a>
-        <a href="/produtos" class="hover:underline">Produtos</a>
-        <a href="/clientes" class="hover:underline">Clientes</a>
-        <a href="/vendas/nova" class="hover:underline">Nova Venda</a>
-        <form method="post" action="/logout" class="ml-auto">
-            <button type="submit" class="hover:underline">Sair</button>
-        </form>
-    </nav>
-    {% endif %}
-    <main class="p-4 max-w-6xl mx-auto">
-        {% block content %}{% endblock %}
-    </main>
 </body>
 </html>

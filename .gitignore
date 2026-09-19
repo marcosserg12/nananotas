@@ -1,4 +1,5 @@
 .superpowers/
+.claude-flow/
 .env
 __pycache__/
 *.pyc

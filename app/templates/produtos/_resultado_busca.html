@@ -1,4 +1,8 @@
+{% if produtos or termo %}
 <ul class="border rounded bg-white divide-y">
+    {% if not produtos %}
+    <li class="p-2 text-slate-500 text-sm">Nenhum produto encontrado</li>
+    {% endif %}
     {% for produto in produtos %}
     <li class="p-2 hover:bg-slate-50 cursor-pointer"
         data-produto-select
@@ -9,3 +13,4 @@
     </li>
     {% endfor %}
 </ul>
+{% endif %}

@@ -1,3 +1,4 @@
+{% if clientes or termo %}
 <ul class="border rounded bg-white divide-y">
     {% for cliente in clientes %}
     <li class="p-2 hover:bg-slate-50 cursor-pointer"
@@ -7,4 +8,15 @@
         {{ cliente.nome }} {% if cliente.cpf_cnpj %}— {{ cliente.cpf_cnpj }}{% endif %}
     </li>
     {% endfor %}
+    {% if not clientes %}
+    <li class="p-2 text-slate-500 text-sm">Nenhum cliente encontrado</li>
+    {% endif %}
+    {% if termo %}
+    <li class="p-2 bg-slate-50">
+        <a href="/clientes/novo?nome={{ termo|urlencode }}&voltar=/vendas/nova" class="text-slate-700 underline text-sm">
+            + Cadastrar "{{ termo }}" como novo cliente
+        </a>
+    </li>
+    {% endif %}
 </ul>
+{% endif %}

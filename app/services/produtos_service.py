@@ -85,6 +85,10 @@ def alternar_ativo(db: Session, produto_id: int) -> Produto:
     return produto
 
 
+def listar_produtos_ativos(db: Session) -> list[Produto]:
+    return db.query(Produto).filter(Produto.ativo.is_(True)).order_by(Produto.nome).all()
+
+
 def buscar_produtos(db: Session, termo: str) -> list[Produto]:
     padrao = f"%{termo}%"
     return (

@@ -48,6 +48,7 @@ FUSO_BRASILIA = timedelta(hours=-3)
 
 from nfelib.nfe.bindings.v4_0 import Nfe
 from nfelib.nfe.bindings.v4_0.leiaute_nfe_v4_00 import (
+    CardTpIntegra,
     CofinsoutrCst,
     DestIndIedest,
     EmitCrt,
@@ -61,15 +62,17 @@ from nfelib.nfe.bindings.v4_0.leiaute_nfe_v4_00 import (
     PisoutrCst,
     ProdIndTot,
     TenderEmi,
+    Tendereco,
     TfinNfe,
     Tnfe,
     Torig,
     TprocEmi,
     TranspModFrete,
 )
-from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, Tmod, TcodUfIbge, TufEmi
+from nfelib.nfe.bindings.v4_0.tipos_basico_v4_00 import Tamb, Tmod, TcodUfIbge, Tuf, TufEmi
 
 from app.config import settings
+from app.constants import FORMAS_PAGAMENTO_COM_BANDEIRA
 from app.models.venda import Venda
 from app.services.fiscal.focus_nfe import FORMAS_PAGAMENTO_CODIGOS
 from app.services.fiscal.sefaz_direto import qrcode_builder
@@ -266,6 +269,50 @@ def _montar_emit() -> "Tnfe.InfNfe.Emit":
     )
 
 
+def _montar_ender_dest(cliente) -> "Tendereco | None":
+    """`enderDest` é opcional no schema (Tnfe.InfNfe.Dest.enderDest), mas
+    quando preenchido exige `cMun` -- o código IBGE de 7 dígitos do
+    município, que o cadastro de cliente (mesmo depois de preenchido via
+    busca de CNPJ na BrasilAPI) não tem: a BrasilAPI devolve o código de
+    município da Receita Federal (TOM), que usa numeração DIFERENTE do IBGE
+    (ver docstring de app.services.cnpj_lookup_service). Inventar um cMun
+    a partir de um dado que não é esse código seria pior do que omitir o
+    grupo inteiro -- a mesma lógica já aplicada ao IBSCBS (ver docstring do
+    módulo).
+
+    Por isso só preenchemos `enderDest` no único caso em que temos, de
+    verdade, um código IBGE confiável: cliente em Brasília-DF, reusando a
+    constante `CMUNFG_EMITENTE` (o mesmo código usado para o emitente, que
+    também fica em Brasília-DF). Para qualquer outro município, o grupo é
+    omitido -- `Dest` continua válido sem ele."""
+    if not (
+        cliente.endereco_logradouro
+        and cliente.endereco_numero
+        and cliente.endereco_bairro
+        and cliente.endereco_cidade
+        and cliente.endereco_uf
+    ):
+        return None
+
+    eh_brasilia_df = cliente.endereco_uf.upper() == "DF" and cliente.endereco_cidade.strip().upper() in (
+        "BRASILIA",
+        "BRASÍLIA",
+    )
+    if not eh_brasilia_df:
+        return None
+
+    return Tendereco(
+        xLgr=cliente.endereco_logradouro,
+        nro=cliente.endereco_numero,
+        xCpl=cliente.endereco_complemento or None,
+        xBairro=cliente.endereco_bairro,
+        cMun=CMUNFG_EMITENTE,
+        xMun=cliente.endereco_cidade,
+        UF=Tuf(cliente.endereco_uf.upper()),
+        CEP=_somente_digitos(cliente.endereco_cep) or None,
+    )
+
+
 def _montar_dest(venda: Venda) -> "Tnfe.InfNfe.Dest | None":
     cliente = venda.cliente
     if cliente is None or cliente.consumidor_final or not cliente.cpf_cnpj:
@@ -278,17 +325,18 @@ def _montar_dest(venda: Venda) -> "Tnfe.InfNfe.Dest | None":
     else:
         kwargs["CNPJ"] = documento
 
-    if cliente.ie:
+    if cliente.tipo_inscricao_estadual == "isento":
+        kwargs["indIEDest"] = DestIndIedest.VALUE_2  # contribuinte isento de inscrição
+    elif cliente.ie:
         kwargs["IE"] = _somente_digitos(cliente.ie)
         kwargs["indIEDest"] = DestIndIedest.VALUE_1  # contribuinte ICMS
     else:
         kwargs["indIEDest"] = DestIndIedest.VALUE_9  # não contribuinte
 
-    # `enderDest` é opcional no schema (Tnfe.InfNfe.Dest.enderDest: Optional).
-    # O modelo Cliente hoje só guarda um campo de texto livre (`endereco`),
-    # sem logradouro/número/bairro/município/UF separados -- não há como
-    # popular Tendereco corretamente a partir dele, então o grupo é omitido
-    # (opção válida, não um atalho às pressas).
+    ender_dest = _montar_ender_dest(cliente)
+    if ender_dest is not None:
+        kwargs["enderDest"] = ender_dest
+
     return Tnfe.InfNfe.Dest(**kwargs)
 
 
@@ -407,7 +455,14 @@ def _montar_pag(venda: Venda, valor_produtos: Decimal) -> "Tnfe.InfNfe.Pag":
     #7 da revisão final do branch)."""
     codigo = FORMAS_PAGAMENTO_CODIGOS.get(venda.forma_pagamento, "99")
     valor = str(valor_produtos.quantize(DUAS_CASAS, rounding=ROUND_HALF_UP))
-    det_pag = Tnfe.InfNfe.Pag.DetPag(tPag=codigo, vPag=valor)
+
+    card = None
+    if venda.forma_pagamento in FORMAS_PAGAMENTO_COM_BANDEIRA and venda.bandeira:
+        # tpIntegra=2 ("não integrado") -- não há integração com maquininha/
+        # TEF neste sistema, o pagamento no cartão é feito fora dele.
+        card = Tnfe.InfNfe.Pag.DetPag.Card(tpIntegra=CardTpIntegra.VALUE_2, tBand=venda.bandeira)
+
+    det_pag = Tnfe.InfNfe.Pag.DetPag(tPag=codigo, vPag=valor, card=card)
     return Tnfe.InfNfe.Pag(detPag=[det_pag])
 
 

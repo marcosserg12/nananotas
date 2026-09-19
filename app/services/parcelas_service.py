@@ -14,6 +14,7 @@ def gerar_parcelas(
     forma_pagamento: str,
     numero_parcelas: int,
     primeiro_vencimento: date | None = None,
+    bandeira: str | None = None,
 ) -> list[Parcela]:
     venda = db.get(Venda, venda_id)
     if venda is None:
@@ -41,6 +42,7 @@ def gerar_parcelas(
         parcelas.append(parcela)
 
     venda.forma_pagamento = forma_pagamento
+    venda.bandeira = bandeira
     db.commit()
     for parcela in parcelas:
         db.refresh(parcela)

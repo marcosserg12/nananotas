@@ -1,8 +1,42 @@
+from datetime import date, datetime, time
+
 from sqlalchemy.orm import Session
 
+from app.models.cliente import Cliente
 from app.models.nota_fiscal import NotaFiscal, StatusNota
 from app.models.venda import StatusVenda, Venda
 from app.services.fiscal.base import FiscalProvider
+from app.services.fiscal.sefaz_direto.xml_builder import FUSO_BRASILIA
+
+
+def listar_notas(db: Session, cliente: str | None = None, data: date | None = None) -> list[NotaFiscal]:
+    """`cliente` filtra pelo nome do cliente da venda (substring, sem
+    diferenciar caixa); `data` filtra pela data de autorização da nota,
+    observada em Brasília -- mesma janela dia-local -> UTC usada em
+    `dashboard_service.vendas_do_dia`. Notas sem `autorizado_em` (ainda não
+    autorizadas) nunca aparecem quando `data` é informada, porque não têm
+    uma data real pra comparar."""
+    query = db.query(NotaFiscal).join(Venda, NotaFiscal.venda_id == Venda.id)
+
+    if cliente:
+        query = query.join(Cliente, Venda.cliente_id == Cliente.id).filter(Cliente.nome.ilike(f"%{cliente}%"))
+
+    if data:
+        inicio_local = datetime.combine(data, time.min)
+        fim_local = datetime.combine(data, time.max)
+        inicio_utc = inicio_local - FUSO_BRASILIA
+        fim_utc = fim_local - FUSO_BRASILIA
+        query = query.filter(NotaFiscal.autorizado_em >= inicio_utc, NotaFiscal.autorizado_em <= fim_utc)
+
+    return query.order_by(NotaFiscal.id.desc()).all()
+
+
+def formatar_data_hora_local(momento_utc: datetime | None) -> str | None:
+    """Converte `autorizado_em` (gravado em UTC) para a hora exibida em
+    Brasília -- mesma conversão usada no DANFE (`danfe_pdf_service`)."""
+    if momento_utc is None:
+        return None
+    return (momento_utc + FUSO_BRASILIA).strftime("%d/%m/%Y %H:%M")
 
 
 def emitir_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFiscal:
@@ -12,9 +46,28 @@ def emitir_nota(db: Session, venda_id: int, provider: FiscalProvider) -> NotaFis
     if venda.status != StatusVenda.PAGO:
         raise ValueError("Venda ainda não foi paga — não é possível emitir nota fiscal")
 
+    nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
+    # Sem esta guarda, chamar `emitir_nota` de novo para uma venda que já tem
+    # uma nota com chave de acesso (mesmo que o status guardado seja
+    # "rejeitada" por uma falha transitória ao CONSULTAR depois -- ver
+    # `_aplicar_resultado`) chamaria `provider.emitir` outra vez: para o
+    # `SefazDiretoProvider` real, isso reserva um número novo, monta um XML
+    # novo e manda uma NFC-e de verdade, DISTINTA, pra Sefaz -- uma segunda
+    # nota fiscal real para a mesma venda. A tela já esconde o botão nesse
+    # caso, mas isso só protege contra clique acidental, não contra um
+    # duplo-post (duplo clique, F5 num form, retry de rede) chegando direto
+    # nesta rota. Só bloqueamos quando já existe uma chave de acesso de
+    # verdade -- uma nota "processando" (sem chave ainda) continua podendo
+    # ser retentada, é o caminho legítimo já coberto pelos testes existentes.
+    if nota is not None and nota.chave_acesso:
+        raise ValueError(
+            "Esta venda já tem uma nota fiscal com chave de acesso -- emitir de novo criaria uma "
+            "segunda nota fiscal real para a mesma venda. Para corrigir algo, cancele a nota "
+            "existente antes de tentar de novo."
+        )
+
     resultado = provider.emitir(venda)
 
-    nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
     if nota is None:
         nota = NotaFiscal(venda_id=venda_id, referencia=resultado.referencia)
         db.add(nota)
@@ -113,3 +166,5 @@ def _aplicar_resultado(nota: NotaFiscal, resultado) -> None:
     nota.url_danfe = resultado.url_danfe or nota.url_danfe
     nota.url_xml = resultado.url_xml or nota.url_xml
     nota.mensagem_erro = resultado.mensagem_erro
+    if nota.status == StatusNota.AUTORIZADA and nota.autorizado_em is None:
+        nota.autorizado_em = datetime.utcnow()

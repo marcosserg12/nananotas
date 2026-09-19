@@ -26,6 +26,24 @@ def test_gerar_parcelas_divide_valor_e_ajusta_arredondamento(db_session):
     assert parcelas[-1].numero == 3
 
 
+def test_gerar_parcelas_grava_bandeira_na_venda(db_session):
+    venda, _ = _venda_com_item(db_session, preco="10.00", quantidade="1")
+
+    parcelas_service.gerar_parcelas(db_session, venda.id, "cartao_credito", 1, bandeira="06")
+    db_session.refresh(venda)
+
+    assert venda.bandeira == "06"
+
+
+def test_gerar_parcelas_sem_bandeira_grava_none(db_session):
+    venda, _ = _venda_com_item(db_session, preco="10.00", quantidade="1")
+
+    parcelas_service.gerar_parcelas(db_session, venda.id, "dinheiro", 1)
+    db_session.refresh(venda)
+
+    assert venda.bandeira is None
+
+
 def test_confirmar_venda_baixa_estoque_e_marca_como_paga(db_session):
     venda, produto = _venda_com_item(db_session, preco="10.00", quantidade="2", estoque="10")
 

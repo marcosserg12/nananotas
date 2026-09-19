@@ -35,10 +35,6 @@
         <label class="block text-sm font-medium">Preço de venda</label>
         <input type="text" name="preco_venda" value="{{ produto.preco_venda if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
-    <div>
-        <label class="block text-sm font-medium">Estoque atual</label>
-        <input type="text" name="estoque_atual" value="{{ produto.estoque_atual if produto else '0' }}" class="w-full border rounded px-3 py-2">
-    </div>
     <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">{{ "Salvar alterações" if produto else "Salvar" }}</button>
 </form>
 {% endblock %}

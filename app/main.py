@@ -41,8 +41,8 @@ app.include_router(auth_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(produtos_router.router)
 app.include_router(clientes_router.router)
-app.include_router(vendas_router.router)
 app.include_router(notas_router.router)
+app.include_router(vendas_router.router)
 
 
 @app.exception_handler(NotAuthenticatedError)
