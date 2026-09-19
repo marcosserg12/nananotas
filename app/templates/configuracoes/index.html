@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Configurações - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Configurações</h1>
+
+{% if request.query_params.get("sucesso") %}
+<p class="bg-emerald-700 text-white px-4 py-3 rounded mb-4">Certificado atualizado com sucesso.</p>
+{% endif %}
+
+<div class="bg-white p-6 rounded shadow max-w-lg">
+    <h2 class="font-semibold mb-2">Certificado digital (A1)</h2>
+    <p class="text-sm text-slate-600 mb-4">
+        É o certificado usado pra assinar e emitir as notas fiscais na Sefaz. Precisa ser trocado
+        quando o certificado atual vencer.
+    </p>
+
+    {% if certificado.existe %}
+    <p class="text-sm text-slate-600 mb-4">
+        Certificado atual: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.
+    </p>
+    {% else %}
+    <p class="text-sm text-red-600 mb-4">Nenhum certificado configurado ainda.</p>
+    {% endif %}
+
+    <form method="post" action="/configuracoes/certificado" enctype="multipart/form-data" class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium mb-1">Arquivo do certificado (.pfx)</label>
+            <input type="file" name="arquivo" accept=".pfx,.p12" required class="w-full border rounded px-3 py-2">
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Senha do certificado</label>
+            <input type="password" name="senha" required class="w-full border rounded px-3 py-2">
+        </div>
+        <button type="submit" class="w-full bg-brand-500 text-white py-3 rounded font-bold text-lg">Salvar certificado</button>
+    </form>
+</div>
+{% endblock %}

@@ -10,6 +10,7 @@ from app.config import settings
 from app.routers import (
     auth_router,
     clientes_router,
+    configuracoes_router,
     dashboard_router,
     notas_router,
     produtos_router,
@@ -43,6 +44,7 @@ app.include_router(produtos_router.router)
 app.include_router(clientes_router.router)
 app.include_router(notas_router.router)
 app.include_router(vendas_router.router)
+app.include_router(configuracoes_router.router)
 
 
 @app.exception_handler(NotAuthenticatedError)
