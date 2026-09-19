@@ -15,9 +15,29 @@
     </p>
 
     {% if certificado.existe %}
-    <p class="text-sm text-slate-600 mb-4">
-        Certificado atual: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.
-    </p>
+    <div class="text-sm text-slate-600 mb-4 border rounded p-3 space-y-1 {% if certificado.expirado %}border-red-300 bg-red-50{% endif %}">
+        {% if certificado.proprietario %}
+        <p><span class="font-medium">Titular:</span> {{ certificado.proprietario }}</p>
+        {% endif %}
+        {% if certificado.cnpj_cpf %}
+        <p><span class="font-medium">CNPJ/CPF:</span> {{ certificado.cnpj_cpf }}</p>
+        {% endif %}
+        {% if certificado.emissor %}
+        <p><span class="font-medium">Emitido por:</span> {{ certificado.emissor }}</p>
+        {% endif %}
+        {% if certificado.valido_ate %}
+        <p>
+            <span class="font-medium">Válido até:</span> {{ certificado.valido_ate }}
+            {% if certificado.expirado %}
+            <span class="text-red-600 font-bold">(EXPIRADO)</span>
+            {% endif %}
+        </p>
+        {% endif %}
+        {% if certificado.erro_leitura %}
+        <p class="text-red-600">{{ certificado.erro_leitura }}</p>
+        {% endif %}
+        <p class="text-xs text-slate-400">Arquivo: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.</p>
+    </div>
     {% else %}
     <p class="text-sm text-red-600 mb-4">Nenhum certificado configurado ainda.</p>
     {% endif %}

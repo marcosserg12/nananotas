@@ -36,6 +36,29 @@ def test_info_certificado_atual_quando_existe(caminho_certificado_isolado):
     assert info["modificado_em"]
 
 
+def test_info_certificado_atual_mostra_detalhes_com_senha_correta(caminho_certificado_isolado, monkeypatch):
+    caminho_certificado_isolado.write_bytes(CERTIFICADO_TESTE.read_bytes())
+    monkeypatch.setattr(settings, "sefaz_certificado_senha", SENHA_TESTE)
+
+    info = certificado_service.info_certificado_atual()
+
+    assert info["erro_leitura"] is None
+    assert info["proprietario"] == "Certificado de Teste"
+    assert info["emissor"] == "Certificado de Teste"
+    assert info["valido_ate"]
+    assert info["expirado"] is False
+
+
+def test_info_certificado_atual_com_senha_salva_errada_nao_quebra(caminho_certificado_isolado):
+    caminho_certificado_isolado.write_bytes(CERTIFICADO_TESTE.read_bytes())
+
+    info = certificado_service.info_certificado_atual()
+
+    assert info["existe"] is True
+    assert info["erro_leitura"]
+    assert info["proprietario"] is None
+
+
 def test_substituir_certificado_com_senha_correta_troca_o_arquivo(caminho_certificado_isolado, tmp_path):
     env_falso = tmp_path / ".env"
     env_falso.write_text("SEFAZ_CERTIFICADO_SENHA=senha-antiga\nOUTRA_CHAVE=valor\n", encoding="utf-8")

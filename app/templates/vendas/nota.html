@@ -125,7 +125,7 @@
     <a href="{{ nota.url_danfe }}" target="_blank" class="bg-slate-800 text-white px-4 py-2 rounded">Imprimir cupom</a>
     {% endif %}
     {% if nota.status.value == "autorizada" %}
-    <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" onsubmit="return confirm('Cancelar esta nota fiscal?');">
+    <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" data-confirm-mensagem="Cancelar esta nota fiscal? Essa ação avisa a Sefaz e não pode ser desfeita.">
         <input type="hidden" name="motivo" value="Cancelamento solicitado pelo estabelecimento">
         <button type="submit" class="bg-red-700 text-white px-4 py-2 rounded">Cancelar nota</button>
     </form>

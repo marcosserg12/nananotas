@@ -42,7 +42,7 @@
                     {% else %}
                     <a href="/vendas/{{ venda.id }}/nota" class="text-slate-600 underline">Emitir nota</a>
                     {% endif %}
-                    <form method="post" action="/vendas/{{ venda.id }}/excluir" onsubmit="return confirm('Excluir este orçamento? Essa ação não pode ser desfeita.');">
+                    <form method="post" action="/vendas/{{ venda.id }}/excluir" data-confirm-mensagem="Excluir este orçamento? Essa ação não pode ser desfeita.">
                         <button type="submit" class="text-red-600 underline">Excluir</button>
                     </form>
                 </div>

@@ -230,6 +230,94 @@
         .fab-nova-venda:hover { filter: brightness(1.1); transform: translateY(-2px); }
         .fab-nova-venda:active { transform: translateY(1px); }
         .fab-nova-venda svg { flex-shrink: 0; }
+
+        /* Modal de confirmação com a cara do sistema, no lugar do
+           confirm() nativo do navegador (cinza, sem marca, sem leitura
+           fácil pra quem tem baixa visão). Usado por qualquer <form> que
+           tenha o atributo `data-confirm-mensagem`. */
+        .modal-confirmar {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-confirmar[hidden] { display: none; }
+        .modal-confirmar-fundo {
+            position: absolute;
+            inset: 0;
+            background: rgba(24, 21, 19, .6);
+            backdrop-filter: blur(2px);
+            animation: modalFundo .18s ease both;
+        }
+        @keyframes modalFundo { from { opacity: 0; } to { opacity: 1; } }
+        .modal-confirmar-caixa {
+            position: relative;
+            background: #FFFFFF;
+            border-radius: .9rem;
+            max-width: 23rem;
+            width: 100%;
+            padding: 1.75rem 1.5rem 1.5rem;
+            text-align: center;
+            border-top: .4rem solid #C8102E;
+            box-shadow: 0 24px 48px -12px rgba(24, 21, 19, .5);
+            animation: modalCaixa .22s cubic-bezier(.2, .9, .3, 1.25) both;
+        }
+        @keyframes modalCaixa {
+            from { opacity: 0; transform: translateY(10px) scale(.96); }
+            to { opacity: 1; transform: none; }
+        }
+        .modal-confirmar-icone {
+            width: 3.2rem;
+            height: 3.2rem;
+            margin: 0 auto .9rem;
+            border-radius: 999px;
+            background: #FDECEC;
+            color: #C8102E;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-confirmar-titulo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.7rem;
+            letter-spacing: .02em;
+            margin-bottom: .4rem;
+        }
+        .modal-confirmar-texto {
+            color: #4A4442;
+            font-size: 1rem;
+            line-height: 1.45;
+            margin-bottom: 1.5rem;
+        }
+        .modal-confirmar-botoes {
+            display: flex;
+            flex-direction: column;
+            gap: .6rem;
+        }
+        .modal-confirmar-btn {
+            padding: .85rem 1rem;
+            border-radius: .6rem;
+            font-weight: 700;
+            font-size: 1.05rem;
+            cursor: pointer;
+            transition: filter .15s ease, transform .12s ease, box-shadow .2s ease;
+        }
+        .modal-confirmar-btn:active { transform: translateY(1px); }
+        .modal-confirmar-btn-cancelar {
+            background: #F7F6F5;
+            color: #181513;
+            border: 1px solid #D9D5D1;
+        }
+        .modal-confirmar-btn-cancelar:hover { background: #EDEBE9; }
+        .modal-confirmar-btn-confirmar {
+            background: #C8102E;
+            color: #FFFFFF;
+            border: none;
+        }
+        .modal-confirmar-btn-confirmar:hover { filter: brightness(1.1); box-shadow: 0 8px 20px -8px rgba(24, 21, 19, .4); }
     </style>
 </head>
 <body class="text-slate-800">
@@ -299,6 +387,74 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v8M8 12h8"/></svg>
         Nova Venda
     </a>
+    <div id="modal_confirmar" class="modal-confirmar" hidden>
+        <div class="modal-confirmar-fundo" data-modal-fechar></div>
+        <div class="modal-confirmar-caixa" role="alertdialog" aria-modal="true" aria-labelledby="modal_confirmar_titulo" aria-describedby="modal_confirmar_texto">
+            <div class="modal-confirmar-icone">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            </div>
+            <h2 id="modal_confirmar_titulo" class="modal-confirmar-titulo">Tem certeza?</h2>
+            <p id="modal_confirmar_texto" class="modal-confirmar-texto"></p>
+            <div class="modal-confirmar-botoes">
+                <button type="button" id="modal_confirmar_cancelar" class="modal-confirmar-btn modal-confirmar-btn-cancelar">Cancelar</button>
+                <button type="button" id="modal_confirmar_confirmar" class="modal-confirmar-btn modal-confirmar-btn-confirmar">Sim, tenho certeza</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var modal = document.getElementById("modal_confirmar");
+            var texto = document.getElementById("modal_confirmar_texto");
+            var botaoConfirmar = document.getElementById("modal_confirmar_confirmar");
+            var botaoCancelar = document.getElementById("modal_confirmar_cancelar");
+            var formPendente = null;
+
+            function abrirModal(mensagem, form) {
+                texto.textContent = mensagem;
+                formPendente = form;
+                modal.hidden = false;
+                botaoCancelar.focus();
+                document.body.style.overflow = "hidden";
+            }
+
+            function fecharModal() {
+                modal.hidden = true;
+                formPendente = null;
+                document.body.style.overflow = "";
+            }
+
+            botaoCancelar.addEventListener("click", fecharModal);
+            modal.querySelector("[data-modal-fechar]").addEventListener("click", fecharModal);
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && !modal.hidden) fecharModal();
+            });
+            botaoConfirmar.addEventListener("click", function () {
+                var form = formPendente;
+                fecharModal();
+                if (form) {
+                    if (form.hasAttribute("data-sair-intencional")) {
+                        window.dispatchEvent(new Event("app:saida-confirmada"));
+                    }
+                    form.dataset.confirmado = "1";
+                    form.requestSubmit();
+                }
+            });
+
+            // Qualquer <form> com `data-confirm-mensagem` passa por aqui em
+            // vez do confirm() nativo do navegador -- sem marca, sem
+            // acessibilidade, e no celular fica minúsculo.
+            document.addEventListener("submit", function (event) {
+                var form = event.target;
+                if (!form.dataset) return;
+                if (form.dataset.confirmMensagem && form.dataset.confirmado !== "1") {
+                    event.preventDefault();
+                    abrirModal(form.dataset.confirmMensagem, form);
+                } else if (form.dataset.confirmado === "1") {
+                    delete form.dataset.confirmado;
+                }
+            });
+        })();
+    </script>
     {% endif %}
     <main class="p-4 sm:p-6 max-w-6xl mx-auto" style="padding-bottom: 6rem;">
         {% block content %}{% endblock %}

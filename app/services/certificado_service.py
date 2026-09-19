@@ -19,12 +19,28 @@ def info_certificado_atual() -> dict:
     if not existe:
         return {"existe": False, "caminho": str(caminho) if caminho else None, "tamanho_kb": None, "modificado_em": None}
     estatisticas = caminho.stat()
-    return {
+    info = {
         "existe": True,
         "caminho": str(caminho),
         "tamanho_kb": round(estatisticas.st_size / 1024, 1),
         "modificado_em": datetime.fromtimestamp(estatisticas.st_mtime).strftime("%d/%m/%Y %H:%M"),
+        "proprietario": None,
+        "cnpj_cpf": None,
+        "emissor": None,
+        "valido_ate": None,
+        "expirado": None,
+        "erro_leitura": None,
     }
+    try:
+        certificado = Certificado(str(caminho), settings.sefaz_certificado_senha, raise_expirado=False)
+        info["proprietario"] = certificado.proprietario
+        info["cnpj_cpf"] = certificado.cnpj_cpf
+        info["emissor"] = certificado.emissor
+        info["valido_ate"] = certificado.fim_validade.astimezone().strftime("%d/%m/%Y")
+        info["expirado"] = certificado.expirado
+    except Exception:
+        info["erro_leitura"] = "Não foi possível ler os detalhes do certificado com a senha salva."
+    return info
 
 
 def substituir_certificado(conteudo: bytes, senha: str, caminho_env: Path | None = None) -> None:

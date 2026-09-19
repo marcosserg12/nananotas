@@ -35,13 +35,39 @@
 
 {% if venda.status.value == "orcamento" %}
 <div class="flex flex-col sm:flex-row gap-2 mt-4">
-    <a href="/vendas/{{ venda.id }}/pagamento" class="text-center bg-emerald-700 text-white px-4 py-3 rounded font-bold text-lg">
+    <a href="/vendas/{{ venda.id }}/pagamento" data-sair-intencional class="text-center bg-emerald-700 text-white px-4 py-3 rounded font-bold text-lg">
         Ir para pagamento
     </a>
-    <form method="post" action="/vendas/{{ venda.id }}/excluir" onsubmit="return confirm('Excluir este orçamento? Essa ação não pode ser desfeita.');">
+    <form method="post" action="/vendas/{{ venda.id }}/excluir" data-confirm-mensagem="Excluir este orçamento? Essa ação não pode ser desfeita." data-sair-intencional>
         <button type="submit" class="w-full bg-red-700 text-white px-4 py-3 rounded font-medium">Excluir orçamento</button>
     </form>
 </div>
+<script>
+    // Enquanto o orçamento ainda está sendo montado, sair sem querer da tela
+    // (fechar a aba, apertar voltar, digitar outro endereço) arrisca perder
+    // itens que ainda não foram pra pagamento nem excluídos -- então avisa
+    // antes, a não ser que a saída seja uma das ações esperadas desta
+    // própria tela (marcadas com `data-sair-intencional`).
+    (function () {
+        var saindoIntencionalmente = false;
+        var marcar = function () { saindoIntencionalmente = true; };
+        window.addEventListener("beforeunload", function (event) {
+            if (saindoIntencionalmente) return;
+            event.preventDefault();
+            event.returnValue = "";
+        });
+        // O link "Ir para pagamento" não passa pelo modal -- marca direto no
+        // clique. Já o form "Excluir orçamento" passa pelo modal de
+        // confirmação (ver base.html); só conta como saída intencional
+        // quando o usuário de fato confirma lá, não na primeira tentativa de
+        // envio (que só abre o modal) -- senão, cancelar a exclusão
+        // desativaria o aviso pro resto da tela.
+        document.querySelectorAll("a[data-sair-intencional]").forEach(function (elemento) {
+            elemento.addEventListener("click", marcar);
+        });
+        window.addEventListener("app:saida-confirmada", marcar);
+    })();
+</script>
 {% else %}
 <a href="/vendas/{{ venda.id }}/nota" class="block text-center mt-4 bg-emerald-700 text-white px-4 py-3 rounded font-bold text-lg">
     Ver nota fiscal
