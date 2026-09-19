@@ -59,6 +59,19 @@ def test_info_certificado_atual_com_senha_salva_errada_nao_quebra(caminho_certif
     assert info["proprietario"] is None
 
 
+def test_caminho_certificado_para_download_quando_existe(caminho_certificado_isolado):
+    caminho_certificado_isolado.write_bytes(CERTIFICADO_TESTE.read_bytes())
+
+    caminho = certificado_service.caminho_certificado_para_download()
+
+    assert caminho == caminho_certificado_isolado
+
+
+def test_caminho_certificado_para_download_quando_nao_existe_levanta_erro(caminho_certificado_isolado):
+    with pytest.raises(FileNotFoundError):
+        certificado_service.caminho_certificado_para_download()
+
+
 def test_substituir_certificado_com_senha_correta_troca_o_arquivo(caminho_certificado_isolado, tmp_path):
     env_falso = tmp_path / ".env"
     env_falso.write_text("SEFAZ_CERTIFICADO_SENHA=senha-antiga\nOUTRA_CHAVE=valor\n", encoding="utf-8")

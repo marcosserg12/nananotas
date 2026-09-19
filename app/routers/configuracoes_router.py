@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import get_current_user
@@ -28,3 +28,12 @@ def atualizar_certificado(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return RedirectResponse(url="/configuracoes?sucesso=1", status_code=303)
+
+
+@router.get("/certificado/baixar")
+def baixar_certificado(usuario: Usuario = Depends(get_current_user)):
+    try:
+        caminho = certificado_service.caminho_certificado_para_download()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return FileResponse(caminho, media_type="application/x-pkcs12", filename=caminho.name)

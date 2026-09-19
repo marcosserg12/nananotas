@@ -37,6 +37,7 @@
         <p class="text-red-600">{{ certificado.erro_leitura }}</p>
         {% endif %}
         <p class="text-xs text-slate-400">Arquivo: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.</p>
+        <a href="/configuracoes/certificado/baixar" class="inline-block text-sm font-medium text-brand-600 underline mt-1">Baixar arquivo do certificado (.pfx)</a>
     </div>
     {% else %}
     <p class="text-sm text-red-600 mb-4">Nenhum certificado configurado ainda.</p>

@@ -69,3 +69,30 @@ def test_tela_mostra_link_da_pagina_apos_sucesso(authed_client, tmp_path, monkey
 
     assert response.status_code == 200
     assert "atualizado com sucesso" in response.text
+
+
+def test_baixar_certificado_sem_login_redireciona(client):
+    response = client.get("/configuracoes/certificado/baixar", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_baixar_certificado_quando_nao_existe_retorna_404(authed_client, tmp_path, monkeypatch):
+    _isolar_certificado(tmp_path, monkeypatch)
+
+    response = authed_client.get("/configuracoes/certificado/baixar")
+
+    assert response.status_code == 404
+
+
+def test_baixar_certificado_com_sucesso_retorna_o_arquivo(authed_client, tmp_path, monkeypatch):
+    caminho = _isolar_certificado(tmp_path, monkeypatch)
+    caminho.write_bytes(CERTIFICADO_TESTE.read_bytes())
+
+    response = authed_client.get("/configuracoes/certificado/baixar")
+
+    assert response.status_code == 200
+    assert response.content == CERTIFICADO_TESTE.read_bytes()
+    assert "attachment" in response.headers["content-disposition"]
+    assert caminho.name in response.headers["content-disposition"]

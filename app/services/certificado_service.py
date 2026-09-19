@@ -43,6 +43,16 @@ def info_certificado_atual() -> dict:
     return info
 
 
+def caminho_certificado_para_download() -> Path:
+    """Retorna o path do certificado atual pra rota de download -- expõe só
+    o arquivo `.pfx`, nunca a senha (sem ela o arquivo sozinho não abre em
+    lugar nenhum)."""
+    caminho = Path(settings.sefaz_certificado_path) if settings.sefaz_certificado_path else None
+    if caminho is None or not caminho.is_file():
+        raise FileNotFoundError("Nenhum certificado configurado")
+    return caminho
+
+
 def substituir_certificado(conteudo: bytes, senha: str, caminho_env: Path | None = None) -> None:
     """Valida o certificado novo (arquivo + senha, abrindo de verdade com
     `erpbrasil.assinatura`) ANTES de substituir o atual -- um upload errado
