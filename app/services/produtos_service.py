@@ -1,7 +1,9 @@
+from collections.abc import Mapping
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.dinheiro import parse_reais
 from app.models.categoria import Categoria
 from app.models.produto import Produto
 
@@ -30,14 +32,12 @@ def obter_ou_criar_categoria(db: Session, nome: str) -> Categoria:
     return categoria
 
 
-def validar_config_gerador(produto: Produto) -> None:
+def validar_faixa_gerador(chance: int | None, minimo: Decimal | None, maximo: Decimal | None) -> None:
     """Chance entre 1 e 100; a faixa de preço é opcional (sem ela o produto
     simplesmente não entra no gerador), mas se vier tem que estar completa e
     coerente -- senão o gerador falharia só na hora de vender."""
-    chance = produto.gerador_chance
     if chance is None or not 1 <= chance <= 100:
         raise ValueError("A chance de aparecer precisa estar entre 1 e 100")
-    minimo, maximo = produto.gerador_preco_min, produto.gerador_preco_max
     if minimo is None and maximo is None:
         return
     if minimo is None or maximo is None:
@@ -46,6 +46,68 @@ def validar_config_gerador(produto: Produto) -> None:
         raise ValueError("O preço mínimo precisa ser maior que zero")
     if maximo < minimo:
         raise ValueError("O preço máximo não pode ser menor que o mínimo")
+
+
+def validar_config_gerador(produto: Produto) -> None:
+    validar_faixa_gerador(produto.gerador_chance, produto.gerador_preco_min, produto.gerador_preco_max)
+
+
+def linhas_config_gerador(produtos: list[Produto], digitado: dict[int, dict] | None = None) -> list[dict]:
+    """Uma linha por produto pras telas que editam o gerador: o que a pessoa
+    acabou de digitar (quando algo deu erro e a tela volta com a mensagem) ou,
+    senão, o que está salvo como padrão."""
+    linhas = []
+    for produto in produtos:
+        if digitado and produto.id in digitado:
+            valores = digitado[produto.id]
+        else:
+            valores = {
+                "chance": str(produto.gerador_chance),
+                "preco_min": f"{produto.gerador_preco_min:.2f}" if produto.gerador_preco_min is not None else "",
+                "preco_max": f"{produto.gerador_preco_max:.2f}" if produto.gerador_preco_max is not None else "",
+            }
+        linhas.append({"produto": produto, **valores})
+    return linhas
+
+
+def tem_campos_do_gerador(dados: Mapping, produtos: list[Produto]) -> bool:
+    return any(f"min_{produto.id}" in dados for produto in produtos)
+
+
+def interpretar_config_gerador(
+    dados: Mapping, produtos: list[Produto]
+) -> tuple[list[dict], dict[int, dict], str | None]:
+    """Lê os campos `chance_<id>`, `min_<id>` e `max_<id>` de um formulário.
+    Devolve (configs prontas, o que foi digitado, primeira mensagem de erro)."""
+    configs: list[dict] = []
+    digitado: dict[int, dict] = {}
+    erro: str | None = None
+    for produto in produtos:
+        bruto = {
+            "chance": str(dados.get(f"chance_{produto.id}", "")).strip(),
+            "preco_min": str(dados.get(f"min_{produto.id}", "")).strip(),
+            "preco_max": str(dados.get(f"max_{produto.id}", "")).strip(),
+        }
+        digitado[produto.id] = bruto
+        if erro:
+            continue
+        try:
+            chance = int(bruto["chance"] or "100")
+        except ValueError:
+            erro = f"{produto.nome}: chance inválida (use um número inteiro de 1 a 100)"
+            continue
+        try:
+            configs.append(
+                {
+                    "produto_id": produto.id,
+                    "chance": chance,
+                    "preco_min": parse_reais(bruto["preco_min"]) if bruto["preco_min"] else None,
+                    "preco_max": parse_reais(bruto["preco_max"]) if bruto["preco_max"] else None,
+                }
+            )
+        except ValueError as exc:
+            erro = f"{produto.nome}: {exc}"
+    return configs, digitado, erro
 
 
 def _com_faixa_do_gerador(consulta):

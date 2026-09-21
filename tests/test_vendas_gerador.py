@@ -147,15 +147,14 @@ def test_rota_gera_itens_aceitando_virgula_e_mostra_na_tela(authed_client, db_se
     assert "140.50" in pagina.text
 
 
-def test_rota_com_valor_invalido_volta_com_mensagem_de_erro(authed_client, venda, cardapio):
+def test_rota_com_valor_invalido_mostra_o_erro_e_mantem_o_que_foi_digitado(authed_client, venda, cardapio):
     response = authed_client.post(
         f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "abc"}, follow_redirects=False
     )
 
-    assert response.status_code == 303
-    assert response.headers["location"].startswith(f"/vendas/{venda.id}?erro=")
-    pagina = authed_client.get(response.headers["location"])
-    assert "Valor inválido" in pagina.text
+    assert response.status_code == 400
+    assert "Valor inválido" in response.text
+    assert 'value="abc"' in response.text
 
 
 def test_rota_sem_nenhuma_faixa_de_preco_mostra_o_motivo_na_tela(authed_client, venda):
@@ -163,8 +162,8 @@ def test_rota_sem_nenhuma_faixa_de_preco_mostra_o_motivo_na_tela(authed_client, 
         f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "100"}, follow_redirects=False
     )
 
-    pagina = authed_client.get(response.headers["location"])
-    assert "Nenhum produto" in pagina.text
+    assert response.status_code == 400
+    assert "Nenhum produto" in response.text
 
 
 def test_rota_com_venda_inexistente_retorna_404(authed_client):
@@ -197,3 +196,155 @@ def test_tela_avisa_quantos_produtos_ficaram_de_fora_do_gerador(authed_client, v
     pagina = authed_client.get(f"/vendas/{venda.id}")
 
     assert "1 produto sem faixa de preço não entra no gerador" in pagina.text
+
+
+# ---------------- ajuste só desta nota ----------------
+
+def _campos(produto, chance="100", minimo="", maximo=""):
+    return {f"chance_{produto.id}": chance, f"min_{produto.id}": minimo, f"max_{produto.id}": maximo}
+
+
+def _todos_os_campos(cardapio, **por_produto):
+    """Simula o formulário do orçamento: um trio de campos por produto. O que não
+    for informado repete o padrão salvo (como a tela já vem preenchida)."""
+    campos = {}
+    for chave, produto in cardapio.items():
+        padrao = {
+            "chance": str(produto.gerador_chance),
+            "minimo": f"{produto.gerador_preco_min:.2f}",
+            "maximo": f"{produto.gerador_preco_max:.2f}",
+        }
+        campos.update(_campos(produto, **{**padrao, **por_produto.get(chave, {})}))
+    return campos
+
+
+def test_tela_traz_a_tabela_de_ajuste_ja_preenchida_com_o_padrao(authed_client, venda, cardapio):
+    pagina = authed_client.get(f"/vendas/{venda.id}")
+
+    assert "Ajustar produtos e preços só desta nota" in pagina.text
+    refeicao = cardapio["refeicao"]
+    assert f'name="chance_{refeicao.id}" value="100"' in pagina.text
+    assert f'name="min_{refeicao.id}" value="30.00"' in pagina.text
+    assert f'name="max_{refeicao.id}" value="45.00"' in pagina.text
+    assert 'name="salvar_padrao"' in pagina.text
+
+
+def test_faixas_ajustadas_na_hora_valem_so_para_esta_nota(authed_client, db_session, venda, cardapio):
+    campos = _todos_os_campos(cardapio, refeicao={"minimo": "20", "maximo": "25"})
+    for outro in ("bebida", "sobremesa"):
+        campos.update(_campos(cardapio[outro], "100", "", ""))  # fora desta nota
+
+    response = authed_client.post(
+        f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "100", **campos}, follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    db_session.refresh(venda)
+    assert venda.valor_total == Decimal("100.00")
+    assert {i.produto_id for i in venda.itens} == {cardapio["refeicao"].id}
+    assert all(Decimal("20") <= i.preco_unitario <= Decimal("25") for i in venda.itens)
+    db_session.refresh(cardapio["refeicao"])
+    assert cardapio["refeicao"].gerador_preco_min == Decimal("30.00")  # padrão intacto
+
+
+def test_marcar_guardar_como_padrao_atualiza_o_padrao_dos_produtos(authed_client, db_session, venda, cardapio):
+    campos = _todos_os_campos(cardapio, refeicao={"chance": "90", "minimo": "20", "maximo": "45"})
+
+    response = authed_client.post(
+        f"/vendas/{venda.id}/gerar-itens",
+        data={"valor_total": "140", "salvar_padrao": "on", **campos},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    refeicao = cardapio["refeicao"]
+    db_session.refresh(refeicao)
+    assert (refeicao.gerador_chance, refeicao.gerador_preco_min, refeicao.gerador_preco_max) == (
+        90, Decimal("20.00"), Decimal("45.00"),
+    )
+
+
+def test_sem_marcar_guardar_como_padrao_nada_muda_no_cadastro(authed_client, db_session, venda, cardapio):
+    campos = _todos_os_campos(cardapio, refeicao={"chance": "90", "minimo": "20", "maximo": "45"})
+
+    authed_client.post(f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "140", **campos})
+
+    refeicao = cardapio["refeicao"]
+    db_session.refresh(refeicao)
+    assert (refeicao.gerador_chance, refeicao.gerador_preco_min) == (100, Decimal("30.00"))
+
+
+def test_faixa_invertida_na_nota_mostra_erro_com_o_produto_e_preserva_a_digitacao(
+    authed_client, db_session, venda, cardapio
+):
+    vendas_service.adicionar_item(db_session, venda.id, cardapio["bebida"].id, Decimal("1"), Decimal("7.00"))
+    campos = _todos_os_campos(cardapio, bebida={"minimo": "12", "maximo": "8"})
+
+    response = authed_client.post(
+        f"/vendas/{venda.id}/gerar-itens",
+        data={"valor_total": "140", "salvar_padrao": "on", **campos},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert "Bebida: O preço máximo não pode ser menor" in response.text
+    assert f'name="min_{cardapio["bebida"].id}" value="12"' in response.text
+    assert f'name="max_{cardapio["bebida"].id}" value="8"' in response.text
+    assert "<details" in response.text and "open" in response.text.split("<details", 1)[1].split(">", 1)[0]
+    db_session.refresh(venda)
+    assert len(venda.itens) == 1  # nada foi apagado
+    db_session.refresh(cardapio["bebida"])
+    assert cardapio["bebida"].gerador_preco_min == Decimal("6.00")  # nem o padrão mudou
+
+
+def test_chance_invalida_na_nota_mostra_erro(authed_client, venda, cardapio):
+    campos = _todos_os_campos(cardapio, refeicao={"chance": "muita"})
+
+    response = authed_client.post(f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "140", **campos})
+
+    assert response.status_code == 400
+    assert "chance inválida" in response.text
+
+
+def test_geracao_que_falha_nao_guarda_o_padrao_mesmo_marcado(authed_client, db_session, venda, cardapio):
+    campos = _todos_os_campos(
+        cardapio,
+        refeicao={"chance": "50", "minimo": "500", "maximo": "600"},
+        bebida={"minimo": "", "maximo": ""},
+        sobremesa={"minimo": "", "maximo": ""},
+    )
+
+    response = authed_client.post(
+        f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "10", "salvar_padrao": "on", **campos}
+    )
+
+    assert response.status_code == 400
+    refeicao = cardapio["refeicao"]
+    db_session.refresh(refeicao)
+    assert (refeicao.gerador_chance, refeicao.gerador_preco_min) == (100, Decimal("30.00"))
+
+
+def test_sem_os_campos_da_tabela_usa_o_padrao_salvo(authed_client, db_session, venda, cardapio):
+    response = authed_client.post(
+        f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "140"}, follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    db_session.refresh(venda)
+    assert venda.valor_total == Decimal("140.00")
+
+
+def test_servico_com_configs_usa_as_faixas_recebidas_e_ignora_produto_inativo(db_session, venda, cardapio):
+    produtos_service.alternar_ativo(db_session, cardapio["bebida"].id)
+    configs = [
+        {"produto_id": cardapio["refeicao"].id, "chance": 100, "preco_min": Decimal("20"), "preco_max": Decimal("25")},
+        {"produto_id": cardapio["bebida"].id, "chance": 100, "preco_min": Decimal("5"), "preco_max": Decimal("6")},
+    ]
+
+    for semente in range(15):
+        resultado = vendas_service.gerar_itens_por_valor(
+            db_session, venda.id, Decimal("92.30"), random.Random(semente), configs=configs
+        )
+
+        assert resultado.valor_total == Decimal("92.30")
+        assert {i.produto_id for i in resultado.itens} == {cardapio["refeicao"].id}

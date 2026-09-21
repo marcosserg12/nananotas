@@ -57,13 +57,54 @@ def adicionar_item(
     return item
 
 
+def _candidatos_do_gerador(db: Session, configs: list[dict] | None) -> list[gerador_itens_service.Candidato]:
+    """Sem `configs`, usa o padrão salvo em cada produto. Com `configs` (vindas
+    da tela do orçamento), usa o que foi ajustado só para esta nota; produto
+    com preço mínimo e máximo em branco fica de fora."""
+    if configs is None:
+        origem = [
+            (p.id, p.gerador_chance, p.gerador_preco_min, p.gerador_preco_max)
+            for p in produtos_service.listar_candidatos_gerador(db)
+        ]
+    else:
+        ativos = {p.id: p for p in produtos_service.listar_produtos_ativos(db)}
+        origem = []
+        for config in configs:
+            produto = ativos.get(config["produto_id"])
+            if produto is None:
+                continue
+            try:
+                produtos_service.validar_faixa_gerador(config["chance"], config["preco_min"], config["preco_max"])
+            except ValueError as exc:
+                raise ValueError(f"{produto.nome}: {exc}") from exc
+            if config["preco_min"] is not None:
+                origem.append((produto.id, config["chance"], config["preco_min"], config["preco_max"]))
+    return [
+        gerador_itens_service.Candidato(
+            produto_id=produto_id,
+            chance=chance,
+            preco_min=int((minimo * 100).to_integral_value()),
+            preco_max=int((maximo * 100).to_integral_value()),
+        )
+        for produto_id, chance, minimo, maximo in origem
+    ]
+
+
 def gerar_itens_por_valor(
-    db: Session, venda_id: int, valor_total: Decimal, rng: random.Random | None = None
+    db: Session,
+    venda_id: int,
+    valor_total: Decimal,
+    rng: random.Random | None = None,
+    configs: list[dict] | None = None,
 ) -> Venda:
     """Troca TODOS os itens do orçamento por uma combinação de produtos do
     gerador cuja soma dá exatamente `valor_total` (ver
     `gerador_itens_service`). Se não conseguir montar, levanta `ValueError` e
-    os itens atuais ficam intactos."""
+    os itens atuais ficam intactos.
+
+    `configs` (opcional): chance e faixa de preço de cada produto só para
+    esta nota, no lugar do padrão salvo -- cada item tem `produto_id`,
+    `chance`, `preco_min`, `preco_max`."""
     venda = db.get(Venda, venda_id)
     if venda is None:
         raise ValueError("Venda não encontrada")
@@ -72,15 +113,7 @@ def gerar_itens_por_valor(
     if valor_total <= 0:
         raise ValueError("Informe um valor maior que zero")
 
-    candidatos = [
-        gerador_itens_service.Candidato(
-            produto_id=produto.id,
-            chance=produto.gerador_chance,
-            preco_min=int((produto.gerador_preco_min * 100).to_integral_value()),
-            preco_max=int((produto.gerador_preco_max * 100).to_integral_value()),
-        )
-        for produto in produtos_service.listar_candidatos_gerador(db)
-    ]
+    candidatos = _candidatos_do_gerador(db, configs)
     total_centavos = int((valor_total * 100).to_integral_value())
     itens_gerados = gerador_itens_service.montar_itens(total_centavos, candidatos, rng)
 

@@ -1,6 +1,5 @@
 import json
 from decimal import Decimal, InvalidOperation
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -45,8 +44,15 @@ def listar_orcamentos(request: Request, db: Session = Depends(get_db), usuario: 
     return templates.TemplateResponse("vendas/orcamentos_list.html", {"request": request, "orcamentos": orcamentos})
 
 
-@router.get("/{venda_id}", response_class=HTMLResponse)
-def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+def _tela_do_orcamento(
+    request: Request,
+    db: Session,
+    venda_id: int,
+    erro: str | None = None,
+    digitado: dict[int, dict] | None = None,
+    valor_digitado: str = "",
+    status_code: int = 200,
+):
     venda = db.get(Venda, venda_id)
     produtos = produtos_service.listar_produtos_ativos(db)
     produtos_json = json.dumps(
@@ -64,23 +70,48 @@ def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usua
             "produtos_json": produtos_json,
             "gerador_disponivel": len(produtos_service.listar_candidatos_gerador(db)),
             "gerador_sem_faixa": produtos_service.contar_produtos_sem_faixa_do_gerador(db),
+            "linhas_gerador": produtos_service.linhas_config_gerador(produtos, digitado),
+            "erro": erro,
+            "valor_digitado": valor_digitado,
         },
+        status_code=status_code,
     )
 
 
+@router.get("/{venda_id}", response_class=HTMLResponse)
+def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    return _tela_do_orcamento(request, db, venda_id)
+
+
 @router.post("/{venda_id}/gerar-itens")
-def gerar_itens(
+async def gerar_itens(
     venda_id: int,
-    valor_total: str = Form(""),
+    request: Request,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
     if db.get(Venda, venda_id) is None:
         raise HTTPException(status_code=404, detail="Venda não encontrada")
+
+    dados = await request.form()
+    valor_digitado = str(dados.get("valor_total", "")).strip()
+    produtos = produtos_service.listar_produtos_ativos(db)
+    # Faixas ajustadas só para esta nota: só valem se a tela mandou os campos.
+    usa_faixas_da_tela = produtos_service.tem_campos_do_gerador(dados, produtos)
+    configs, digitado, erro = (
+        produtos_service.interpretar_config_gerador(dados, produtos) if usa_faixas_da_tela else (None, None, None)
+    )
+
     try:
-        vendas_service.gerar_itens_por_valor(db, venda_id, parse_reais(valor_total))
+        if erro:
+            raise ValueError(erro)
+        vendas_service.gerar_itens_por_valor(db, venda_id, parse_reais(valor_digitado), configs=configs)
+        if configs is not None and str(dados.get("salvar_padrao", "")).strip():
+            produtos_service.salvar_config_gerador(db, configs)
     except ValueError as exc:
-        return RedirectResponse(url=f"/vendas/{venda_id}?erro={quote(str(exc))}", status_code=303)
+        return _tela_do_orcamento(
+            request, db, venda_id, erro=str(exc), digitado=digitado, valor_digitado=valor_digitado, status_code=400
+        )
     return RedirectResponse(url=f"/vendas/{venda_id}", status_code=303)
 
 

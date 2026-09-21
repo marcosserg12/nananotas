@@ -11,8 +11,8 @@
         Digite o valor total e o sistema escolhe os produtos para fechar exatamente esse valor.
         Não gostou da combinação? É só gerar de novo.
     </p>
-    {% if request.query_params.get("erro") %}
-    <p class="bg-red-700 text-white px-3 py-2 rounded mb-3">{{ request.query_params.get("erro") }}</p>
+    {% if erro %}
+    <p class="bg-red-700 text-white px-3 py-2 rounded mb-3">{{ erro }}</p>
     {% endif %}
     {% if gerador_disponivel == 0 %}
     <p class="text-sm text-amber-700 mb-3">
@@ -25,14 +25,58 @@
         <a href="/produtos/gerador" class="underline">Configurar</a>
     </p>
     {% endif %}
-    <form id="form_gerar_itens" method="post" action="/vendas/{{ venda.id }}/gerar-itens" data-sair-intencional
-          class="flex flex-col sm:flex-row gap-3 sm:items-end">
-        <div class="flex-1">
-            <label class="block text-sm mb-1">Valor total (R$)</label>
-            <input type="text" name="valor_total" inputmode="decimal" required placeholder="Ex.: 140,00"
-                   autocomplete="off" class="border rounded px-3 py-2 w-full">
+    <form id="form_gerar_itens" method="post" action="/vendas/{{ venda.id }}/gerar-itens" data-sair-intencional>
+        <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div class="flex-1">
+                <label class="block text-sm mb-1">Valor total (R$)</label>
+                <input type="text" name="valor_total" value="{{ valor_digitado }}" inputmode="decimal" required placeholder="Ex.: 140,00"
+                       autocomplete="off" class="border rounded px-3 py-2 w-full">
+            </div>
+            <button type="submit" class="bg-brand-500 text-white px-4 py-2.5 rounded font-bold w-full sm:w-auto">Gerar produtos</button>
         </div>
-        <button type="submit" class="bg-brand-500 text-white px-4 py-2.5 rounded font-bold w-full sm:w-auto">Gerar produtos</button>
+
+        <details class="mt-4" {{ "open" if erro and linhas_gerador else "" }}>
+            <summary class="cursor-pointer text-slate-700 underline">Ajustar produtos e preços só desta nota</summary>
+            <p class="text-sm text-slate-500 mt-2 mb-2">
+                Já vem preenchido com o padrão de cada produto. Mude o que quiser: vale só para esta nota.
+                Deixe o preço mínimo e máximo <strong>em branco</strong> para não usar o produto nesta nota.
+            </p>
+            <div class="rounded overflow-hidden tabela-scroll" style="border: 1px solid #EDEBE9;">
+            <table class="w-full">
+                <thead class="bg-slate-100 text-left">
+                    <tr>
+                        <th class="p-2">Produto</th>
+                        <th class="p-2">Chance (%)</th>
+                        <th class="p-2">Preço mínimo</th>
+                        <th class="p-2">Preço máximo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas_gerador %}
+                    <tr class="border-t">
+                        <td class="p-2 font-medium" data-label="Produto">{{ linha.produto.nome }}</td>
+                        <td class="p-2" data-label="Chance (%)">
+                            <input type="text" inputmode="numeric" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
+                                   class="border rounded px-3 py-2 w-full sm:w-24">
+                        </td>
+                        <td class="p-2" data-label="Preço mínimo">
+                            <input type="text" inputmode="decimal" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}"
+                                   class="border rounded px-3 py-2 w-full sm:w-28">
+                        </td>
+                        <td class="p-2" data-label="Preço máximo">
+                            <input type="text" inputmode="decimal" name="max_{{ linha.produto.id }}" value="{{ linha.preco_max }}"
+                                   class="border rounded px-3 py-2 w-full sm:w-28">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            <label class="flex items-center gap-3 mt-3 cursor-pointer">
+                <input type="checkbox" name="salvar_padrao" value="on" class="w-6 h-6 accent-red-700">
+                <span>Guardar estes valores como o novo padrão para as próximas notas</span>
+            </label>
+        </details>
     </form>
 </div>
 {% endif %}
