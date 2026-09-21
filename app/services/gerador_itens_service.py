@@ -99,8 +99,8 @@ def montar_itens(
         raise ValueError("Informe um valor maior que zero")
     if not candidatos:
         raise ValueError(
-            "Nenhum produto está liberado para o gerador. Em Produtos > Editar, marque "
-            '"Usar no gerador de valor" e informe o preço mínimo e máximo.'
+            "Nenhum produto tem preço mínimo e máximo definidos. Em Produtos > Gerador de valor, "
+            "preencha a faixa de preço dos produtos."
         )
     for c in candidatos:
         if c.preco_min <= 0 or c.preco_max < c.preco_min:

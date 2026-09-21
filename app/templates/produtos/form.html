@@ -35,44 +35,6 @@
         <label class="block text-sm font-medium">Preço de venda</label>
         <input type="text" name="preco_venda" value="{{ produto.preco_venda if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
-    <div class="border-t pt-4">
-        <label class="flex items-center gap-3 font-medium cursor-pointer">
-            <input type="checkbox" name="gerador_ativo" id="gerador_ativo" value="on" {{ "checked" if produto and produto.gerador_ativo else "" }} class="w-6 h-6 accent-red-700">
-            Usar este produto no gerador de valor
-        </label>
-        <p class="text-sm text-slate-500 mt-1">
-            No orçamento, ao digitar o valor total (ex.: R$ 140,00), o sistema escolhe produtos marcados aqui
-            para fechar exatamente esse valor.
-        </p>
-        <div id="gerador_campos" class="space-y-4 mt-4" {{ "hidden" if not (produto and produto.gerador_ativo) else "" }}>
-            <div>
-                <label class="block text-sm font-medium">Chance de aparecer (%)</label>
-                <input type="text" inputmode="numeric" name="gerador_chance" value="{{ produto.gerador_chance if produto else 100 }}" class="w-full border rounded px-3 py-2">
-                <p class="text-xs text-slate-500 mt-1">100 = aparece quase sempre. 20 = aparece em cerca de 1 a cada 5 vendas.</p>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-sm font-medium">Preço mínimo (R$)</label>
-                    <input type="text" inputmode="decimal" name="gerador_preco_min" value="{{ produto.gerador_preco_min if produto and produto.gerador_preco_min is not none else '' }}" placeholder="Ex.: 30,00" class="w-full border rounded px-3 py-2">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium">Preço máximo (R$)</label>
-                    <input type="text" inputmode="decimal" name="gerador_preco_max" value="{{ produto.gerador_preco_max if produto and produto.gerador_preco_max is not none else '' }}" placeholder="Ex.: 45,00" class="w-full border rounded px-3 py-2">
-                </div>
-            </div>
-            <p class="text-xs text-slate-500">
-                O preço de cada venda fica entre o mínimo e o máximo. Quanto maior a diferença entre eles,
-                mais fácil é fechar o valor exato.
-            </p>
-        </div>
-    </div>
     <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">{{ "Salvar alterações" if produto else "Salvar" }}</button>
 </form>
-<script>
-    (function () {
-        var caixa = document.getElementById("gerador_ativo");
-        var campos = document.getElementById("gerador_campos");
-        caixa.addEventListener("change", function () { campos.hidden = !caixa.checked; });
-    })();
-</script>
 {% endblock %}

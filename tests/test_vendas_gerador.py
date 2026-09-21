@@ -7,13 +7,13 @@ from app.models.venda import StatusVenda
 from app.services import clientes_service, parcelas_service, produtos_service, vendas_service
 
 
-def _criar_produto(db, codigo, nome, *, gerador=True, chance=100, minimo="30.00", maximo="45.00", ativo=True):
+def _criar_produto(db, codigo, nome, *, faixa=True, chance=100, minimo="30.00", maximo="45.00", ativo=True):
     produto = produtos_service.criar_produto(
         db, codigo_interno=codigo, nome=nome, categoria_nome="Diversos", ncm="21069090", unidade="UN",
         preco_venda=Decimal("0.01"),
-        gerador_ativo=gerador, gerador_chance=chance,
-        gerador_preco_min=Decimal(minimo) if gerador else None,
-        gerador_preco_max=Decimal(maximo) if gerador else None,
+        gerador_chance=chance,
+        gerador_preco_min=Decimal(minimo) if faixa else None,
+        gerador_preco_max=Decimal(maximo) if faixa else None,
     )
     if not ativo:
         produtos_service.alternar_ativo(db, produto.id)
@@ -74,9 +74,9 @@ def test_gerar_de_novo_com_semente_diferente_troca_a_combinacao(db_session, vend
     assert len(combinacoes) > 3
 
 
-def test_gerar_itens_so_usa_produtos_ativos_e_liberados_no_gerador(db_session, venda):
+def test_gerar_itens_so_usa_produtos_ativos_e_com_faixa_de_preco(db_session, venda):
     liberado = _criar_produto(db_session, "1", "Liberado", minimo="20.00", maximo="30.00")
-    _criar_produto(db_session, "2", "Nao liberado", gerador=False)
+    _criar_produto(db_session, "2", "Sem faixa", faixa=False)
     _criar_produto(db_session, "3", "Inativo", ativo=False, minimo="5.00", maximo="8.00")
 
     for semente in range(20):
@@ -85,8 +85,8 @@ def test_gerar_itens_so_usa_produtos_ativos_e_liberados_no_gerador(db_session, v
         assert {i.produto_id for i in resultado.itens} == {liberado.id}
 
 
-def test_gerar_itens_sem_produtos_liberados_da_erro_e_nao_mexe_nos_itens(db_session, venda):
-    produto = _criar_produto(db_session, "1", "Comum", gerador=False)
+def test_gerar_itens_sem_nenhuma_faixa_de_preco_da_erro_e_nao_mexe_nos_itens(db_session, venda):
+    produto = _criar_produto(db_session, "1", "Comum", faixa=False)
     vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("2"), Decimal("10.00"))
 
     with pytest.raises(ValueError, match="Nenhum produto"):
@@ -158,7 +158,7 @@ def test_rota_com_valor_invalido_volta_com_mensagem_de_erro(authed_client, venda
     assert "Valor inválido" in pagina.text
 
 
-def test_rota_sem_produtos_liberados_mostra_o_motivo_na_tela(authed_client, venda):
+def test_rota_sem_nenhuma_faixa_de_preco_mostra_o_motivo_na_tela(authed_client, venda):
     response = authed_client.post(
         f"/vendas/{venda.id}/gerar-itens", data={"valor_total": "100"}, follow_redirects=False
     )
@@ -178,10 +178,22 @@ def test_tela_do_orcamento_mostra_o_cartao_montar_pelo_valor(authed_client, vend
 
     assert "Montar pelo valor" in pagina.text
     assert f'action="/vendas/{venda.id}/gerar-itens"' in pagina.text
-    assert "Nenhum produto está liberado" not in pagina.text
+    assert "Nenhum produto tem preço mínimo" not in pagina.text
+    assert "sem faixa de preço" not in pagina.text
 
 
-def test_tela_avisa_quando_nenhum_produto_esta_liberado_no_gerador(authed_client, venda):
+def test_tela_avisa_quando_nenhum_produto_tem_faixa_de_preco(authed_client, venda, db_session):
+    _criar_produto(db_session, "1", "Sem faixa", faixa=False)
+
     pagina = authed_client.get(f"/vendas/{venda.id}")
 
-    assert "Nenhum produto está liberado" in pagina.text
+    assert "Nenhum produto tem preço mínimo" in pagina.text
+    assert 'href="/produtos/gerador"' in pagina.text
+
+
+def test_tela_avisa_quantos_produtos_ficaram_de_fora_do_gerador(authed_client, venda, cardapio, db_session):
+    _criar_produto(db_session, "9", "Sem faixa", faixa=False)
+
+    pagina = authed_client.get(f"/vendas/{venda.id}")
+
+    assert "1 produto sem faixa de preço não entra no gerador" in pagina.text

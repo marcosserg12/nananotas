@@ -16,30 +16,85 @@ router = APIRouter(prefix="/produtos")
 templates = Jinja2Templates(directory="app/templates")
 
 
-def _config_gerador_do_form(
-    gerador_ativo: str, gerador_chance: str, gerador_preco_min: str, gerador_preco_max: str
-) -> dict:
-    try:
-        chance = int((gerador_chance or "100").strip())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Chance de aparecer inválida")
-    try:
-        preco_min = parse_reais(gerador_preco_min) if gerador_preco_min.strip() else None
-        preco_max = parse_reais(gerador_preco_max) if gerador_preco_max.strip() else None
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Preço do gerador: {exc}")
-    return {
-        "gerador_ativo": gerador_ativo.strip().lower() in ("on", "true", "1", "sim"),
-        "gerador_chance": chance,
-        "gerador_preco_min": preco_min,
-        "gerador_preco_max": preco_max,
-    }
-
-
 @router.get("", response_class=HTMLResponse)
 def listar(request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     grupos = produtos_service.listar_produtos_por_categoria(db)
     return templates.TemplateResponse("produtos/list.html", {"request": request, "grupos": grupos})
+
+
+def _linhas_do_gerador(produtos: list[Produto], digitado: dict[int, dict] | None = None) -> list[dict]:
+    """Uma linha por produto pra tela do gerador: o que a pessoa acabou de
+    digitar (quando a gravação falhou e a tela volta com o erro) ou, senão, o
+    que está salvo no banco."""
+    linhas = []
+    for produto in produtos:
+        if digitado and produto.id in digitado:
+            valores = digitado[produto.id]
+        else:
+            valores = {
+                "chance": str(produto.gerador_chance),
+                "preco_min": f"{produto.gerador_preco_min:.2f}" if produto.gerador_preco_min is not None else "",
+                "preco_max": f"{produto.gerador_preco_max:.2f}" if produto.gerador_preco_max is not None else "",
+            }
+        linhas.append({"produto": produto, **valores})
+    return linhas
+
+
+@router.get("/gerador", response_class=HTMLResponse)
+def gerador_form(request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    produtos = produtos_service.listar_produtos_ativos(db)
+    return templates.TemplateResponse(
+        "produtos/gerador.html", {"request": request, "linhas": _linhas_do_gerador(produtos), "erro": None}
+    )
+
+
+@router.post("/gerador")
+async def gerador_salvar(request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    dados = await request.form()
+    produtos = produtos_service.listar_produtos_ativos(db)
+    digitado: dict[int, dict] = {}
+    configs: list[dict] = []
+    erro: str | None = None
+
+    for produto in produtos:
+        bruto = {
+            "chance": str(dados.get(f"chance_{produto.id}", "")).strip(),
+            "preco_min": str(dados.get(f"min_{produto.id}", "")).strip(),
+            "preco_max": str(dados.get(f"max_{produto.id}", "")).strip(),
+        }
+        digitado[produto.id] = bruto
+        if erro:
+            continue
+        try:
+            chance = int(bruto["chance"] or "100")
+        except ValueError:
+            erro = f"{produto.nome}: chance inválida (use um número inteiro de 1 a 100)"
+            continue
+        try:
+            configs.append(
+                {
+                    "produto_id": produto.id,
+                    "chance": chance,
+                    "preco_min": parse_reais(bruto["preco_min"]) if bruto["preco_min"] else None,
+                    "preco_max": parse_reais(bruto["preco_max"]) if bruto["preco_max"] else None,
+                }
+            )
+        except ValueError as exc:
+            erro = f"{produto.nome}: {exc}"
+
+    if erro is None:
+        try:
+            produtos_service.salvar_config_gerador(db, configs)
+        except ValueError as exc:
+            erro = str(exc)
+
+    if erro is not None:
+        return templates.TemplateResponse(
+            "produtos/gerador.html",
+            {"request": request, "linhas": _linhas_do_gerador(produtos, digitado), "erro": erro},
+            status_code=400,
+        )
+    return RedirectResponse(url="/produtos/gerador?salvo=1", status_code=303)
 
 
 @router.get("/novo", response_class=HTMLResponse)
@@ -58,30 +113,21 @@ def criar(
     codigo_fabricante: str = Form(""),
     preco_custo: str = Form("0"),
     estoque_atual: str = Form("0"),
-    gerador_ativo: str = Form(""),
-    gerador_chance: str = Form("100"),
-    gerador_preco_min: str = Form(""),
-    gerador_preco_max: str = Form(""),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    config_gerador = _config_gerador_do_form(gerador_ativo, gerador_chance, gerador_preco_min, gerador_preco_max)
-    try:
-        produtos_service.criar_produto(
-            db,
-            codigo_interno=codigo_interno,
-            nome=nome,
-            categoria_nome=categoria_nome,
-            ncm=ncm,
-            unidade=unidade,
-            preco_venda=Decimal(preco_venda),
-            codigo_fabricante=codigo_fabricante or None,
-            preco_custo=Decimal(preco_custo or "0"),
-            estoque_atual=Decimal(estoque_atual or "0"),
-            **config_gerador,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    produtos_service.criar_produto(
+        db,
+        codigo_interno=codigo_interno,
+        nome=nome,
+        categoria_nome=categoria_nome,
+        ncm=ncm,
+        unidade=unidade,
+        preco_venda=Decimal(preco_venda),
+        codigo_fabricante=codigo_fabricante or None,
+        preco_custo=Decimal(preco_custo or "0"),
+        estoque_atual=Decimal(estoque_atual or "0"),
+    )
     return RedirectResponse(url="/produtos", status_code=303)
 
 
@@ -110,14 +156,9 @@ def editar(
     codigo_fabricante: str = Form(""),
     preco_custo: str = Form("0"),
     estoque_atual: str = Form("0"),
-    gerador_ativo: str = Form(""),
-    gerador_chance: str = Form("100"),
-    gerador_preco_min: str = Form(""),
-    gerador_preco_max: str = Form(""),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    config_gerador = _config_gerador_do_form(gerador_ativo, gerador_chance, gerador_preco_min, gerador_preco_max)
     categoria = produtos_service.obter_ou_criar_categoria(db, categoria_nome)
     try:
         produtos_service.atualizar_produto(
@@ -132,11 +173,9 @@ def editar(
             codigo_fabricante=codigo_fabricante or None,
             preco_custo=Decimal(preco_custo or "0"),
             estoque_atual=Decimal(estoque_atual or "0"),
-            **config_gerador,
         )
     except ValueError as exc:
-        status = 404 if str(exc) == "Produto não encontrado" else 400
-        raise HTTPException(status_code=status, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc))
     return RedirectResponse(url="/produtos", status_code=303)
 
 

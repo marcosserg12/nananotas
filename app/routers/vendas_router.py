@@ -63,6 +63,7 @@ def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usua
             "produtos": produtos,
             "produtos_json": produtos_json,
             "gerador_disponivel": len(produtos_service.listar_candidatos_gerador(db)),
+            "gerador_sem_faixa": produtos_service.contar_produtos_sem_faixa_do_gerador(db),
         },
     )
 

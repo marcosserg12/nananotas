@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Gerador de valor - Nana Lanches{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-1">Gerador de valor</h1>
+<p class="text-slate-600 mb-4 max-w-3xl">
+    No orçamento, ao digitar o valor total (ex.: R$ 140,00), o sistema escolhe produtos desta lista para fechar
+    exatamente esse valor. Defina, para cada produto, a <strong>chance de aparecer</strong> e a
+    <strong>faixa de preço</strong> em que ele costuma ser vendido.
+</p>
+
+{% if request.query_params.get("salvo") %}
+<p class="bg-emerald-700 text-white px-4 py-3 rounded mb-4">Configuração salva.</p>
+{% endif %}
+{% if erro %}
+<p class="bg-red-700 text-white px-4 py-3 rounded mb-4">{{ erro }}</p>
+{% endif %}
+
+<form method="post" action="/produtos/gerador">
+    <div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
+    <table class="w-full">
+        <thead class="bg-slate-100 text-left">
+            <tr>
+                <th class="p-2">Produto</th>
+                <th class="p-2">Chance de aparecer (%)</th>
+                <th class="p-2">Preço mínimo (R$)</th>
+                <th class="p-2">Preço máximo (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for linha in linhas %}
+            <tr class="border-t">
+                <td class="p-2 font-medium" data-label="Produto">{{ linha.produto.codigo_interno }} - {{ linha.produto.nome }}</td>
+                <td class="p-2" data-label="Chance (%)">
+                    <input type="text" inputmode="numeric" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
+                           class="border rounded px-3 py-2 w-full sm:w-28">
+                </td>
+                <td class="p-2" data-label="Preço mínimo">
+                    <input type="text" inputmode="decimal" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}" placeholder="Ex.: 30,00"
+                           class="border rounded px-3 py-2 w-full sm:w-32">
+                </td>
+                <td class="p-2" data-label="Preço máximo">
+                    <input type="text" inputmode="decimal" name="max_{{ linha.produto.id }}" value="{{ linha.preco_max }}" placeholder="Ex.: 45,00"
+                           class="border rounded px-3 py-2 w-full sm:w-32">
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not linhas %}
+            <tr class="border-t">
+                <td class="p-2 text-slate-500" colspan="4">Nenhum produto ativo cadastrado.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+    </div>
+
+    <ul class="text-sm text-slate-600 mb-4 max-w-3xl list-disc pl-5 space-y-1">
+        <li><strong>Chance:</strong> 100 aparece quase sempre; 20 aparece em cerca de 1 a cada 5 vendas.</li>
+        <li><strong>Preço:</strong> em cada venda, o sistema escolhe um preço entre o mínimo e o máximo. Quanto maior a diferença entre eles, mais fácil é fechar o valor exato.</li>
+        <li>Deixe o preço mínimo e o máximo <strong>em branco</strong> para o produto <strong>não</strong> entrar no gerador.</li>
+    </ul>
+
+    <button type="submit" class="bg-brand-500 text-white px-6 py-3 rounded font-bold text-lg">Salvar configuração</button>
+</form>
+{% endblock %}

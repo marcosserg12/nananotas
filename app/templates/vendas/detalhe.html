@@ -16,8 +16,13 @@
     {% endif %}
     {% if gerador_disponivel == 0 %}
     <p class="text-sm text-amber-700 mb-3">
-        Nenhum produto está liberado para o gerador ainda. Em <a href="/produtos" class="underline">Produtos</a>,
-        clique em Editar e marque "Usar este produto no gerador de valor".
+        Nenhum produto tem preço mínimo e máximo definidos ainda. Configure em
+        <a href="/produtos/gerador" class="underline">Produtos &gt; Gerador de valor</a>.
+    </p>
+    {% elif gerador_sem_faixa %}
+    <p class="text-sm text-slate-500 mb-3">
+        {{ gerador_sem_faixa }} produto{{ "s" if gerador_sem_faixa > 1 else "" }} sem faixa de preço não entra{{ "m" if gerador_sem_faixa > 1 else "" }} no gerador.
+        <a href="/produtos/gerador" class="underline">Configurar</a>
     </p>
     {% endif %}
     <form id="form_gerar_itens" method="post" action="/vendas/{{ venda.id }}/gerar-itens" data-sair-intencional

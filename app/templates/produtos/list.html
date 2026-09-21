@@ -3,7 +3,10 @@
 {% block content %}
 <div class="flex justify-between items-center mb-4">
     <h1 class="text-2xl font-bold">Produtos</h1>
-    <a href="/produtos/novo" class="bg-slate-800 text-white px-4 py-2 rounded">+ Novo produto</a>
+    <div class="flex flex-wrap gap-2">
+        <a href="/produtos/gerador" class="bg-brand-500 text-white px-4 py-2 rounded">Gerador de valor</a>
+        <a href="/produtos/novo" class="bg-slate-800 text-white px-4 py-2 rounded">+ Novo produto</a>
+    </div>
 </div>
 {% for categoria, produtos in grupos %}
 <h2 class="text-lg font-semibold mt-6 mb-2">{{ categoria.nome }}</h2>
@@ -26,10 +29,10 @@
             <td class="p-2" data-label="Nome">{{ produto.nome }}</td>
             <td class="p-2" data-label="Preço venda">R$ {{ "%.2f"|format(produto.preco_venda) }}</td>
             <td class="p-2" data-label="Gerador">
-                {% if produto.gerador_ativo %}
+                {% if produto.gerador_preco_min is not none and produto.gerador_preco_max is not none %}
                 {{ produto.gerador_chance }}% · R$ {{ "%.2f"|format(produto.gerador_preco_min) }} a {{ "%.2f"|format(produto.gerador_preco_max) }}
                 {% else %}
-                <span class="text-slate-500">—</span>
+                <span class="text-amber-700">sem faixa de preço</span>
                 {% endif %}
             </td>
             <td class="p-2" data-label="Ativo">{{ "Sim" if produto.ativo else "Não" }}</td>
