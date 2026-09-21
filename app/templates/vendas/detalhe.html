@@ -82,6 +82,7 @@
     }
 
     function selecionarProdutoPorTexto(texto) {
+        var campoProduto = document.getElementById("produto_texto");
         var produtoIdInput = document.getElementById("produto_id");
         var precoInput = document.getElementById("preco_unitario_input");
         var textoLimpo = texto.trim();
@@ -93,6 +94,17 @@
         var produto = PRODUTOS.find(function (p) {
             return p.codigo.toUpperCase() === tokenCodigo.toUpperCase();
         });
+
+        // Achou só pelo código (ex.: digitou "1"): completa o campo com
+        // "código - nome" na hora, pra confirmar visualmente qual produto
+        // foi reconhecido -- sem isso, o vendedor via só o número na tela e
+        // não tinha certeza de que era o produto certo até apertar
+        // "Adicionar". A checagem contra `textoLimpo` (não contra
+        // `tokenCodigo`) evita reescrever de novo a cada tecla depois que o
+        // campo já foi completado.
+        if (produto && textoLimpo.toUpperCase() === produto.codigo.toUpperCase()) {
+            campoProduto.value = produto.codigo + " - " + produto.nome;
+        }
 
         // Senão, procura pelo nome -- só assume o produto se a busca for
         // específica o bastante pra sobrar um único resultado; com mais de
