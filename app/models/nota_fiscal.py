@@ -34,5 +34,9 @@ class NotaFiscal(Base):
     # padrão de conversão pra hora de Brasília). Nunca sobrescrito depois de
     # preenchido, mesmo que a nota seja reconsultada várias vezes.
     autorizado_em = Column(DateTime, nullable=True)
+    # Momento (UTC) do último envio bem-sucedido do cupom por e-mail pro
+    # cliente -- sobrescrito a cada reenvio (ao contrário de `autorizado_em`),
+    # porque aqui o que importa é "quando foi a última vez", não "a primeira".
+    email_enviado_em = Column(DateTime, nullable=True)
 
     venda = relationship("Venda")

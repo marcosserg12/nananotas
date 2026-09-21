@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     emitente_endereco_uf: str = "DF"
     emitente_endereco_cep: str = ""
     emitente_telefone: str = ""
+    mail_host: str = ""
+    mail_port: int = 587
+    mail_username: str = ""
+    mail_password: str = ""
+    mail_encryption: str = "tls"
+    mail_from_address: str = ""
+    mail_from_name: str = "Nana Lanches"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

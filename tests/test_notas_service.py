@@ -1,9 +1,11 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+import pytest
+
 from app.models.cliente import TipoPessoa
 from app.models.nota_fiscal import NotaFiscal, StatusNota
-from app.services import clientes_service, notas_service, produtos_service, vendas_service
+from app.services import clientes_service, email_service, notas_service, produtos_service, vendas_service
 
 
 def test_formatar_data_hora_local_converte_utc_para_brasilia():
@@ -81,3 +83,54 @@ def test_listar_notas_ordena_das_mais_recentes_para_as_mais_antigas(db_session):
     resultado = notas_service.listar_notas(db_session)
 
     assert [n.id for n in resultado] == [nota2.id, nota1.id]
+
+
+def test_enviar_email_nota_sem_chave_de_acesso_levanta_erro(db_session):
+    cliente = clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PF, nome="Sem Nota", email="a@b.com")
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+
+    with pytest.raises(ValueError, match="ainda não autorizada"):
+        notas_service.enviar_email_nota(db_session, venda.id)
+
+
+def test_enviar_email_nota_com_sucesso_marca_email_enviado_em(db_session, monkeypatch):
+    cliente = clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PF, nome="Com Nota", email="a@b.com")
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    nota = NotaFiscal(
+        venda_id=venda.id, provedor="sefaz_direto", referencia="v1", status=StatusNota.AUTORIZADA,
+        chave_acesso="1" * 44,
+    )
+    db_session.add(nota)
+    db_session.commit()
+
+    chamadas = []
+    monkeypatch.setattr(
+        email_service, "enviar_nota_por_email", lambda v, n: chamadas.append((v.id, n.id))
+    )
+
+    resultado = notas_service.enviar_email_nota(db_session, venda.id)
+
+    assert chamadas == [(venda.id, nota.id)]
+    assert resultado.email_enviado_em is not None
+
+
+def test_enviar_email_nota_propaga_erro_do_servico_de_email(db_session, monkeypatch):
+    cliente = clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PF, nome="Sem Email", email=None)
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    nota = NotaFiscal(
+        venda_id=venda.id, provedor="sefaz_direto", referencia="v1", status=StatusNota.AUTORIZADA,
+        chave_acesso="2" * 44,
+    )
+    db_session.add(nota)
+    db_session.commit()
+
+    def _levanta_erro(v, n):
+        raise ValueError("Este cliente não tem e-mail cadastrado")
+
+    monkeypatch.setattr(email_service, "enviar_nota_por_email", _levanta_erro)
+
+    with pytest.raises(ValueError, match="não tem e-mail cadastrado"):
+        notas_service.enviar_email_nota(db_session, venda.id)
+
+    db_session.refresh(nota)
+    assert nota.email_enviado_em is None

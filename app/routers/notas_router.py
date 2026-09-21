@@ -62,6 +62,7 @@ def ver_nota(venda_id: int, request: Request, db: Session = Depends(get_db), usu
             "parcelas": parcelas,
             "bandeiras": BANDEIRAS_CARTAO,
             "formas_pagamento": FORMAS_PAGAMENTO_LABELS,
+            "formatar_data_hora_local": notas_service.formatar_data_hora_local,
         },
     )
 
@@ -77,7 +78,28 @@ def emitir(
         notas_service.emitir_nota(db, venda_id, provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        # Melhor esforço: cliente sem e-mail cadastrado, SMTP não configurado
+        # ou uma falha de envio não podem derrubar a emissão, que já teve
+        # sucesso -- quem quiser garantir o envio usa o botão de reenviar,
+        # que já mostra o motivo da falha.
+        notas_service.enviar_email_nota(db, venda_id)
+    except ValueError:
+        pass
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
+
+
+@router.post("/{venda_id}/nota/reenviar-email")
+def reenviar_email(
+    venda_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    try:
+        notas_service.enviar_email_nota(db, venda_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return RedirectResponse(url=f"/vendas/{venda_id}/nota?email_enviado=1", status_code=303)
 
 
 @router.post("/{venda_id}/nota/marcar-manual")

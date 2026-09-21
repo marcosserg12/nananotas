@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.cliente import Cliente
 from app.models.nota_fiscal import NotaFiscal, StatusNota
 from app.models.venda import StatusVenda, Venda
+from app.services import email_service
 from app.services.fiscal.base import FiscalProvider
 from app.services.fiscal.sefaz_direto.xml_builder import FUSO_BRASILIA
 
@@ -116,6 +117,23 @@ def consultar_nota(db: Session, venda_id: int, provider: FiscalProvider) -> Nota
 
     resultado = provider.consultar(nota.referencia)
     _aplicar_resultado(nota, resultado)
+    db.commit()
+    db.refresh(nota)
+    return nota
+
+
+def enviar_email_nota(db: Session, venda_id: int) -> NotaFiscal:
+    """Envia (ou reenvia) o cupom fiscal por e-mail pro cliente da venda --
+    usada tanto pelo envio automático logo após a emissão (best-effort,
+    silenciosamente ignorado pelo chamador quando falha) quanto pelo botão
+    manual de reenvio (onde a falha deve aparecer pro usuário)."""
+    nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
+    if nota is None or not nota.chave_acesso:
+        raise ValueError("Nota fiscal ainda não autorizada -- não é possível enviar por e-mail")
+
+    email_service.enviar_nota_por_email(nota.venda, nota)
+
+    nota.email_enviado_em = datetime.utcnow()
     db.commit()
     db.refresh(nota)
     return nota

@@ -3,6 +3,10 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Nota fiscal — Orçamento nº {{ venda.numero_orcamento }}</h1>
 
+{% if request.query_params.get("email_enviado") %}
+<p class="bg-emerald-700 text-white px-4 py-3 rounded mb-4">E-mail enviado para o cliente com sucesso.</p>
+{% endif %}
+
 {% if parcelas %}
 <h2 class="font-semibold mb-2">Parcelas — {{ venda.forma_pagamento or "-" }}</h2>
 <div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
@@ -113,6 +117,15 @@
     Esta venda já tem uma nota fiscal com chave de acesso -- não pode mais ser excluída.
     {% if nota.status.value == "autorizada" %}Se precisar desfazer, use "Cancelar nota" abaixo.{% endif %}
 </p>
+{% if venda.cliente.email %}
+<p class="text-sm text-slate-500 mb-2">
+    {% if nota.email_enviado_em %}
+    Cupom enviado por e-mail para {{ venda.cliente.email }} em {{ formatar_data_hora_local(nota.email_enviado_em) }}.
+    {% else %}
+    Cupom ainda não foi enviado por e-mail para {{ venda.cliente.email }}.
+    {% endif %}
+</p>
+{% endif %}
 {% endif %}
 {% if nota.provedor == "manual" %}
 <p class="text-sm text-slate-600">Nota marcada manualmente como emitida.</p>
@@ -123,6 +136,11 @@
     </form>
     {% if nota.url_danfe %}
     <a href="{{ nota.url_danfe }}" target="_blank" class="bg-slate-800 text-white px-4 py-2 rounded">Imprimir cupom</a>
+    {% endif %}
+    {% if venda.cliente.email %}
+    <form method="post" action="/vendas/{{ venda.id }}/nota/reenviar-email" data-confirm-mensagem="Reenviar o cupom fiscal por e-mail para {{ venda.cliente.email }}?">
+        <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">{{ "Reenviar e-mail" if nota.email_enviado_em else "Enviar por e-mail" }}</button>
+    </form>
     {% endif %}
     {% if nota.status.value == "autorizada" %}
     <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" data-confirm-mensagem="Cancelar esta nota fiscal? Essa ação avisa a Sefaz e não pode ser desfeita.">

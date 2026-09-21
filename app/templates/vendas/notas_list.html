@@ -44,7 +44,14 @@
             <td class="p-2" data-label="Status">{{ nota.status.value }}</td>
             <td class="p-2" {% if nota.chave_acesso %}data-label="Ações"{% endif %}>
                 {% if nota.chave_acesso %}
-                <a href="/vendas/{{ nota.venda_id }}/nota/danfe" target="_blank" class="text-slate-600 underline">Imprimir</a>
+                <div class="flex flex-wrap gap-3 items-center justify-end">
+                    <a href="/vendas/{{ nota.venda_id }}/nota/danfe" target="_blank" class="text-slate-600 underline">Imprimir</a>
+                    {% if nota.venda.cliente.email %}
+                    <form method="post" action="/vendas/{{ nota.venda_id }}/nota/reenviar-email" data-confirm-mensagem="Reenviar o cupom fiscal por e-mail para {{ nota.venda.cliente.email }}?">
+                        <button type="submit" class="text-slate-600 underline">{{ "Reenviar e-mail" if nota.email_enviado_em else "Enviar e-mail" }}</button>
+                    </form>
+                    {% endif %}
+                </div>
                 {% endif %}
             </td>
         </tr>

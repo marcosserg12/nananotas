@@ -5,9 +5,10 @@ import pytest
 from app.database import get_db
 from app.dependencies import get_fiscal_provider
 from app.main import app
+from app.models.cliente import TipoPessoa
 from app.models.nota_fiscal import NotaFiscal
 from app.services.fiscal.base import FiscalProvider, ResultadoFiscal
-from app.services import clientes_service, parcelas_service, produtos_service, vendas_service
+from app.services import clientes_service, email_service, parcelas_service, produtos_service, vendas_service
 
 
 class FiscalProviderFalso(FiscalProvider):
@@ -256,6 +257,78 @@ def test_emitir_nota_ja_autorizada_e_bloqueado_nao_emite_uma_segunda_nota_real(
     assert segunda.status_code == 400
     assert "segunda nota fiscal real" in segunda.text
     assert provider_falso.emitidas == [venda_paga.id]  # não chamou o provedor de novo
+
+
+@pytest.fixture()
+def venda_paga_cliente_com_email(db_session):
+    cliente = clientes_service.criar_cliente(
+        db_session, tipo_pessoa=TipoPessoa.PF, nome="Cliente Com Email", email="cliente@exemplo.com",
+    )
+    produto = produtos_service.criar_produto(
+        db_session, codigo_interno="3", nome="Combo", categoria_nome="Diversos",
+        ncm="21069090", unidade="UN", preco_venda=Decimal("20.00"), estoque_atual=Decimal("5"),
+    )
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("1"))
+    parcelas_service.gerar_parcelas(db_session, venda.id, "dinheiro", 1)
+    parcelas_service.confirmar_venda(db_session, venda.id, Decimal("20.00"))
+    return venda
+
+
+def test_emitir_nota_envia_email_automaticamente_quando_cliente_tem_email(
+    authed_client_com_provider_falso, venda_paga_cliente_com_email, monkeypatch
+):
+    client, _ = authed_client_com_provider_falso
+    chamadas = []
+    monkeypatch.setattr(email_service, "enviar_nota_por_email", lambda v, n: chamadas.append(v.id))
+
+    client.post(f"/vendas/{venda_paga_cliente_com_email.id}/nota/emitir")
+
+    assert chamadas == [venda_paga_cliente_com_email.id]
+    pagina = client.get(f"/vendas/{venda_paga_cliente_com_email.id}/nota")
+    assert "Cupom enviado por e-mail" in pagina.text
+
+
+def test_emitir_nota_sem_email_do_cliente_nao_quebra_a_emissao(authed_client_com_provider_falso, venda_paga):
+    """`venda_paga` usa o cliente "AO CONSUMIDOR" (sem e-mail) -- confirma
+    que a tentativa automática de envio (melhor esforço) não derruba a
+    emissão, que já teve sucesso."""
+    client, provider_falso = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert provider_falso.emitidas == [venda_paga.id]
+
+
+def test_reenviar_email_sem_login_redireciona(client, venda_paga):
+    response = client.post(f"/vendas/{venda_paga.id}/nota/reenviar-email", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_reenviar_email_com_sucesso_redireciona_com_flag_de_sucesso(
+    authed_client_com_provider_falso, venda_paga_cliente_com_email, monkeypatch
+):
+    client, _ = authed_client_com_provider_falso
+    monkeypatch.setattr(email_service, "enviar_nota_por_email", lambda v, n: None)
+    client.post(f"/vendas/{venda_paga_cliente_com_email.id}/nota/emitir")
+
+    response = client.post(
+        f"/vendas/{venda_paga_cliente_com_email.id}/nota/reenviar-email", follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/vendas/{venda_paga_cliente_com_email.id}/nota?email_enviado=1"
+
+
+def test_reenviar_email_sem_nota_autorizada_retorna_400(authed_client_com_provider_falso, venda_paga):
+    client, _ = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/reenviar-email", follow_redirects=False)
+
+    assert response.status_code == 400
 
 
 def test_cancelar_nota_chama_provedor_com_motivo(authed_client_com_provider_falso, venda_paga):
