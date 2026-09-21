@@ -4,6 +4,34 @@
 <h1 class="text-2xl font-bold mb-1">Orçamento nº {{ venda.numero_orcamento }}</h1>
 <p class="text-slate-600 mb-4">Cliente: {{ venda.cliente.nome }} — Status: {{ venda.status.value }}</p>
 
+{% if venda.status.value == "orcamento" %}
+<div class="bg-white p-4 rounded shadow mb-4" style="border-left: .35rem solid #C8102E;">
+    <h2 class="font-semibold mb-1">Montar pelo valor</h2>
+    <p class="text-sm text-slate-600 mb-3">
+        Digite o valor total e o sistema escolhe os produtos para fechar exatamente esse valor.
+        Não gostou da combinação? É só gerar de novo.
+    </p>
+    {% if request.query_params.get("erro") %}
+    <p class="bg-red-700 text-white px-3 py-2 rounded mb-3">{{ request.query_params.get("erro") }}</p>
+    {% endif %}
+    {% if gerador_disponivel == 0 %}
+    <p class="text-sm text-amber-700 mb-3">
+        Nenhum produto está liberado para o gerador ainda. Em <a href="/produtos" class="underline">Produtos</a>,
+        clique em Editar e marque "Usar este produto no gerador de valor".
+    </p>
+    {% endif %}
+    <form id="form_gerar_itens" method="post" action="/vendas/{{ venda.id }}/gerar-itens" data-sair-intencional
+          class="flex flex-col sm:flex-row gap-3 sm:items-end">
+        <div class="flex-1">
+            <label class="block text-sm mb-1">Valor total (R$)</label>
+            <input type="text" name="valor_total" inputmode="decimal" required placeholder="Ex.: 140,00"
+                   autocomplete="off" class="border rounded px-3 py-2 w-full">
+        </div>
+        <button type="submit" class="bg-brand-500 text-white px-4 py-2.5 rounded font-bold w-full sm:w-auto">Gerar produtos</button>
+    </form>
+</div>
+{% endif %}
+
 <div class="bg-white p-4 rounded shadow mb-4 relative">
     <h2 class="font-semibold mb-3">Adicionar produto</h2>
     <form hx-post="/vendas/{{ venda.id }}/itens" hx-target="#itens-venda" hx-swap="outerHTML"
@@ -66,6 +94,24 @@
             elemento.addEventListener("click", marcar);
         });
         window.addEventListener("app:saida-confirmada", marcar);
+
+        // "Gerar produtos" apaga os itens atuais: só pede confirmação quando
+        // já existe item na tabela (o modal de base.html lê `data-confirm-mensagem`
+        // no envio do formulário, que este listener -- no próprio form, roda
+        // antes -- liga ou desliga). Sem itens, envia direto e conta como saída
+        // intencional (senão o navegador avisaria "deseja sair da página?").
+        var formGerar = document.getElementById("form_gerar_itens");
+        if (formGerar) {
+            formGerar.addEventListener("submit", function () {
+                if (document.querySelector("#itens-venda tbody tr")) {
+                    formGerar.dataset.confirmMensagem =
+                        "Este orçamento já tem produtos. Gerar de novo APAGA os produtos atuais e monta outros. Continuar?";
+                } else {
+                    delete formGerar.dataset.confirmMensagem;
+                    marcar();
+                }
+            });
+        }
     })();
 </script>
 {% else %}

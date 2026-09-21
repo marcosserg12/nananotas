@@ -1,3 +1,4 @@
+import random
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from app.models.cliente import Cliente
 from app.models.nota_fiscal import NotaFiscal
 from app.models.produto import Produto
 from app.models.venda import StatusVenda, Venda, VendaItem
+from app.services import gerador_itens_service, produtos_service
 
 
 def proximo_numero_orcamento(db: Session) -> int:
@@ -53,6 +55,51 @@ def adicionar_item(
     recalcular_total(db, venda_id)
     db.refresh(item)
     return item
+
+
+def gerar_itens_por_valor(
+    db: Session, venda_id: int, valor_total: Decimal, rng: random.Random | None = None
+) -> Venda:
+    """Troca TODOS os itens do orçamento por uma combinação de produtos do
+    gerador cuja soma dá exatamente `valor_total` (ver
+    `gerador_itens_service`). Se não conseguir montar, levanta `ValueError` e
+    os itens atuais ficam intactos."""
+    venda = db.get(Venda, venda_id)
+    if venda is None:
+        raise ValueError("Venda não encontrada")
+    if venda.status != StatusVenda.ORCAMENTO:
+        raise ValueError("Só dá pra montar os produtos enquanto o orçamento ainda está em edição")
+    if valor_total <= 0:
+        raise ValueError("Informe um valor maior que zero")
+
+    candidatos = [
+        gerador_itens_service.Candidato(
+            produto_id=produto.id,
+            chance=produto.gerador_chance,
+            preco_min=int((produto.gerador_preco_min * 100).to_integral_value()),
+            preco_max=int((produto.gerador_preco_max * 100).to_integral_value()),
+        )
+        for produto in produtos_service.listar_candidatos_gerador(db)
+    ]
+    total_centavos = int((valor_total * 100).to_integral_value())
+    itens_gerados = gerador_itens_service.montar_itens(total_centavos, candidatos, rng)
+
+    for item in list(venda.itens):
+        db.delete(item)
+    db.flush()
+    for gerado in itens_gerados:
+        db.add(
+            VendaItem(
+                venda_id=venda_id,
+                produto_id=gerado.produto_id,
+                quantidade=Decimal(gerado.quantidade),
+                preco_unitario=Decimal(gerado.preco_unitario) / Decimal(100),
+            )
+        )
+    db.commit()
+    recalcular_total(db, venda_id)
+    db.refresh(venda)
+    return venda
 
 
 def remover_item(db: Session, item_id: int) -> None:

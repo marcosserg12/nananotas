@@ -14,6 +14,7 @@
             <th class="p-2">Código</th>
             <th class="p-2">Nome</th>
             <th class="p-2">Preço venda</th>
+            <th class="p-2">Gerador</th>
             <th class="p-2">Ativo</th>
             <th class="p-2"></th>
         </tr>
@@ -24,6 +25,13 @@
             <td class="p-2" data-label="Código">{{ produto.codigo_interno }}</td>
             <td class="p-2" data-label="Nome">{{ produto.nome }}</td>
             <td class="p-2" data-label="Preço venda">R$ {{ "%.2f"|format(produto.preco_venda) }}</td>
+            <td class="p-2" data-label="Gerador">
+                {% if produto.gerador_ativo %}
+                {{ produto.gerador_chance }}% · R$ {{ "%.2f"|format(produto.gerador_preco_min) }} a {{ "%.2f"|format(produto.gerador_preco_max) }}
+                {% else %}
+                <span class="text-slate-500">—</span>
+                {% endif %}
+            </td>
             <td class="p-2" data-label="Ativo">{{ "Sim" if produto.ativo else "Não" }}</td>
             <td class="p-2" data-label="Ações">
                 <div class="flex gap-3 items-center justify-end">

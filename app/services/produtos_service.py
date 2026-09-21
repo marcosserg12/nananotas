@@ -30,6 +30,32 @@ def obter_ou_criar_categoria(db: Session, nome: str) -> Categoria:
     return categoria
 
 
+def validar_config_gerador(produto: Produto) -> None:
+    """Se o produto está liberado pro gerador de valor, a configuração precisa
+    estar completa e coerente -- senão o gerador falharia só na hora de vender."""
+    if not produto.gerador_ativo:
+        return
+    chance = produto.gerador_chance
+    if chance is None or not 1 <= chance <= 100:
+        raise ValueError("A chance de aparecer no gerador precisa estar entre 1 e 100")
+    minimo, maximo = produto.gerador_preco_min, produto.gerador_preco_max
+    if minimo is None or maximo is None:
+        raise ValueError("Para usar no gerador, informe o preço mínimo e o preço máximo")
+    if minimo <= 0:
+        raise ValueError("O preço mínimo do gerador precisa ser maior que zero")
+    if maximo < minimo:
+        raise ValueError("O preço máximo do gerador não pode ser menor que o mínimo")
+
+
+def listar_candidatos_gerador(db: Session) -> list[Produto]:
+    return (
+        db.query(Produto)
+        .filter(Produto.ativo.is_(True), Produto.gerador_ativo.is_(True))
+        .order_by(Produto.nome)
+        .all()
+    )
+
+
 def criar_produto(
     db: Session,
     *,
@@ -43,6 +69,10 @@ def criar_produto(
     preco_custo: Decimal = Decimal("0"),
     preco_atacado: Decimal | None = None,
     estoque_atual: Decimal = Decimal("0"),
+    gerador_ativo: bool = False,
+    gerador_chance: int = 100,
+    gerador_preco_min: Decimal | None = None,
+    gerador_preco_max: Decimal | None = None,
 ) -> Produto:
     categoria = obter_ou_criar_categoria(db, categoria_nome)
     produto = Produto(
@@ -57,7 +87,12 @@ def criar_produto(
         preco_atacado=preco_atacado,
         estoque_atual=estoque_atual,
         ativo=True,
+        gerador_ativo=gerador_ativo,
+        gerador_chance=gerador_chance,
+        gerador_preco_min=gerador_preco_min,
+        gerador_preco_max=gerador_preco_max,
     )
+    validar_config_gerador(produto)
     db.add(produto)
     db.commit()
     db.refresh(produto)
@@ -70,6 +105,11 @@ def atualizar_produto(db: Session, produto_id: int, **campos) -> Produto:
         raise ValueError("Produto não encontrado")
     for campo, valor in campos.items():
         setattr(produto, campo, valor)
+    try:
+        validar_config_gerador(produto)
+    except ValueError:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(produto)
     return produto

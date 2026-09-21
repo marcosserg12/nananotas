@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.constants import BANDEIRAS_CARTAO, FORMAS_PAGAMENTO_COM_BANDEIRA
 from app.database import get_db
+from app.dinheiro import parse_reais
 from app.models.cliente import Cliente
 from app.models.usuario import Usuario
 from app.models.venda import StatusVenda, Venda, VendaItem
@@ -55,8 +57,30 @@ def detalhe(venda_id: int, request: Request, db: Session = Depends(get_db), usua
     ).replace("</", "<\\/")  # nunca fechar a tag <script> se um nome de produto contiver "</..."
     return templates.TemplateResponse(
         "vendas/detalhe.html",
-        {"request": request, "venda": venda, "produtos": produtos, "produtos_json": produtos_json},
+        {
+            "request": request,
+            "venda": venda,
+            "produtos": produtos,
+            "produtos_json": produtos_json,
+            "gerador_disponivel": len(produtos_service.listar_candidatos_gerador(db)),
+        },
     )
+
+
+@router.post("/{venda_id}/gerar-itens")
+def gerar_itens(
+    venda_id: int,
+    valor_total: str = Form(""),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    if db.get(Venda, venda_id) is None:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
+    try:
+        vendas_service.gerar_itens_por_valor(db, venda_id, parse_reais(valor_total))
+    except ValueError as exc:
+        return RedirectResponse(url=f"/vendas/{venda_id}?erro={quote(str(exc))}", status_code=303)
+    return RedirectResponse(url=f"/vendas/{venda_id}", status_code=303)
 
 
 @router.post("/{venda_id}/itens", response_class=HTMLResponse)
