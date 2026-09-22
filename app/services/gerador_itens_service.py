@@ -19,7 +19,6 @@ Como funciona, em resumo:
    os centavos que sobrarem, fechando a conta certinho.
 """
 
-import math
 import random
 from collections import Counter
 from dataclasses import dataclass
@@ -77,20 +76,23 @@ def _maximo(linhas: list[_Linha]) -> int:
     return sum(linha.q * linha.cand.preco_max for linha in linhas)
 
 
-def _d_compativel(q_linha: int, q_bal: int, extra: int, d_min: int, d_max: int, alvo: int) -> int | None:
-    """Acha `d` em [d_min, d_max], o mais perto de `alvo`, tal que
-    `extra - q_linha * d` seja divisível por `q_bal` (aritmética modular)."""
-    g = math.gcd(q_linha, q_bal)
-    if extra % g != 0:
+def _d_multiplo_de_100(d_min: int, d_max: int, alvo: int, verificar=None) -> int | None:
+    """Múltiplo de 100 dentro de [d_min, d_max] mais perto de `alvo` --
+    garante que o preço unitário (`preco_min + d`) sempre feche em reais
+    inteiros, nunca em centavos aleatórios tipo "R$ 28,17". `verificar`
+    (opcional) filtra ainda mais os candidatos -- usado só quando a
+    balanceadora tem mais de uma unidade (ver mais abaixo), pra achar um `d`
+    cuja sobra dê certo dividida entre as unidades dela."""
+    primeiro = -(-d_min // 100) * 100
+    ultimo = (d_max // 100) * 100
+    if primeiro > ultimo:
         return None
-    modulo = q_bal // g
-    d0 = 0 if modulo == 1 else ((extra // g) * pow(q_linha // g, -1, modulo)) % modulo
-    k_min = -(-(d_min - d0) // modulo)
-    k_max = (d_max - d0) // modulo
-    if k_min > k_max:
-        return None
-    k_alvo = round((alvo - d0) / modulo)
-    return d0 + min(max(k_alvo, k_min), k_max) * modulo
+    candidatos = range(primeiro, ultimo + 1, 100)
+    if verificar is not None:
+        candidatos = [d for d in candidatos if verificar(d)]
+        if not candidatos:
+            return None
+    return min(candidatos, key=lambda d: abs(d - alvo))
 
 
 def _formatar_reais(centavos: int) -> str:
@@ -260,20 +262,28 @@ def _tentar(
         if d_min > d_max:
             return None
 
-        capacidade_total = folga_balanceadora + folga_linha + folga_das_proximas
-        fracao = extra_restante / capacidade_total if capacidade_total else 0
-        alvo = round(fracao * linha.folga * rng.uniform(0.75, 1.25))
+        # Preço-alvo dentro da faixa DESTE produto, com viés pro lado mais
+        # barato: pratos de menor valor tendem a vender mais, então a maioria
+        # das notas usa preços perto do mínimo de cada produto, só de vez em
+        # quando perto do máximo (Beta assimétrica, não uniforme). O `d_min`
+        # calculado acima já garante que o valor final feche certinho mesmo
+        # quando o viés baixo não é suficiente pra chegar no total.
+        alvo = round(linha.folga * rng.betavariate(1.2, 3.0))
 
         eh_ultima = indice == len(outras) - 1
         if eh_ultima and balanceadora is not None and qtd_balanceadora > 1:
             # A balanceadora tem várias unidades: o que sobrar pra ela precisa
             # ser múltiplo da quantidade dela, então esta última linha só pode
-            # assumir os preços que deixam essa sobra "redonda".
-            d = _d_compativel(linha.q, qtd_balanceadora, extra_restante, d_min, d_max, alvo)
-            if d is None:
-                return None
+            # assumir os preços (múltiplos de 100) que deixam essa sobra
+            # "redonda".
+            d = _d_multiplo_de_100(
+                d_min, d_max, alvo,
+                verificar=lambda d: (extra_restante - linha.q * d) % qtd_balanceadora == 0,
+            )
         else:
-            d = min(max(alvo, d_min), d_max)
+            d = _d_multiplo_de_100(d_min, d_max, alvo)
+        if d is None:
+            return None
 
         precos[id(linha)] = linha.cand.preco_min + d
         extra_restante -= linha.q * d
@@ -282,6 +292,16 @@ def _tentar(
         if extra_restante % qtd_balanceadora != 0:
             return None
         d_balanceadora = extra_restante // qtd_balanceadora
+        # Mesmo com `extra_restante` batendo um número redondo de reais,
+        # dividir por uma quantidade > 1 pode não dar outro número redondo
+        # (ex.: R$ 1,00 sobrando pra 2 unidades = R$ 0,50 cada) -- rejeita
+        # esse caso em vez de aceitar um preço quebrado; a tentativa seguinte
+        # tende a usar uma balanceadora de quantidade 1, que sempre resolve.
+        # Com quantidade 1 não tem esse risco: o que sobrar é, por definição,
+        # exatamente o troco do valor total (que pode ter centavos de verdade
+        # quando o total digitado também tem).
+        if qtd_balanceadora > 1 and d_balanceadora % 100 != 0:
+            return None
         if not 0 <= d_balanceadora <= balanceadora.folga:
             return None
         precos[id(balanceadora)] = balanceadora.cand.preco_min + d_balanceadora

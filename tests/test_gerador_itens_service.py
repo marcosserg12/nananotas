@@ -144,3 +144,52 @@ def test_cardapio_comum_com_valor_alto_ganha_mais_linhas_em_vez_de_mais_quantida
     ]
 
     assert max(linhas_por_tentativa) > 2
+
+
+@pytest.mark.parametrize("total", [700, 3000, 6000, 14000, 25000, 55000])
+def test_preco_unitario_fecha_sempre_em_reais_inteiros_quando_o_total_e_inteiro(total):
+    """Pedido real: preço unitário tipo "R$ 28,17" não é realista -- cada
+    produto tem seu preço num número inteiro de reais. Só quando o VALOR
+    TOTAL digitado tem centavos (não é o caso aqui) é que uma única linha
+    pode sobrar com centavos, por necessidade matemática."""
+    for semente in range(60):
+        itens = montar_itens(total, CARDAPIO, random.Random(semente))
+
+        assert all(item.preco_unitario % 100 == 0 for item in itens)
+
+
+@pytest.mark.parametrize("total", [8750, 9999, 14001, 25050])
+def test_preco_unitario_so_tem_centavos_em_no_maximo_uma_linha_quando_o_total_tem_centavos(total):
+    """Quando o total tem centavos, é matematicamente necessário que UMA
+    linha absorva essa diferença -- mas só uma, as outras continuam em reais
+    inteiros."""
+    for semente in range(60):
+        itens = montar_itens(total, CARDAPIO, random.Random(semente))
+
+        com_centavos = [item for item in itens if item.preco_unitario % 100 != 0]
+        assert len(com_centavos) <= 1
+
+
+def test_precos_tendem_pro_lado_barato_da_faixa_de_cada_produto():
+    """Pedido real: pratos de menor valor tendem a vender mais -- o preço
+    sorteado dentro da faixa de cada produto deve, na média (olhando várias
+    notas com cardápios de verdade, várias linhas cada), ficar mais perto do
+    mínimo do que do máximo, não distribuído por igual nem puxado pro topo.
+
+    Usa o CARDAPIO com 3 produtos (não um só): com um único produto, a linha
+    "balanceadora" (que fecha os centavos) fica sozinha e sem viés possível
+    -- ela é só o troco do que sobrou --, o que mascararia o efeito. Com mais
+    produtos, a balanceadora é só uma entre várias linhas, e o viés das
+    outras aparece na média geral.
+    """
+    faixas = {c.produto_id: (c.preco_min, c.preco_max) for c in CARDAPIO if c.preco_max > c.preco_min}
+    posicoes = []
+    for total in (3000, 6000, 9000, 14000, 20000, 25000, 35000, 45000):
+        for semente in range(80):
+            for item in montar_itens(total, CARDAPIO, random.Random(semente * 1000 + total)):
+                minimo, maximo = faixas.get(item.produto_id, (None, None))
+                if minimo is not None:
+                    posicoes.append((item.preco_unitario - minimo) / (maximo - minimo))
+
+    media = sum(posicoes) / len(posicoes)
+    assert media < 0.45, f"média da posição dentro da faixa ficou em {media:.2f}, esperava puxar pro lado barato"
