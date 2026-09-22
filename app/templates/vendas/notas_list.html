@@ -5,12 +5,12 @@
 
 <form method="get" action="/vendas/notas" class="bg-white p-4 rounded shadow mb-4 flex flex-wrap gap-2 items-end">
     <div>
-        <label class="block text-sm">Cliente</label>
-        <input type="text" name="cliente" value="{{ filtro_cliente }}" placeholder="Nome do cliente" class="border rounded px-3 py-2">
+        <label for="filtro_cliente" class="block text-sm">Cliente</label>
+        <input type="text" id="filtro_cliente" name="cliente" value="{{ filtro_cliente }}" placeholder="Nome do cliente" class="border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm">Data</label>
-        <input type="date" name="data" value="{{ filtro_data }}" class="border rounded px-3 py-2">
+        <label for="filtro_data" class="block text-sm">Data</label>
+        <input type="date" id="filtro_data" name="data" value="{{ filtro_data }}" class="border rounded px-3 py-2">
     </div>
     <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">Filtrar</button>
     {% if filtro_cliente or filtro_data %}

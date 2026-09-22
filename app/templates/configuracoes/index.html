@@ -15,7 +15,7 @@
     </p>
 
     {% if certificado.existe %}
-    <div class="text-sm text-slate-600 mb-4 border rounded p-3 space-y-1 {% if certificado.expirado %}border-red-300 bg-red-50{% endif %}">
+    <div class="text-sm mb-4 border rounded p-3 space-y-1 {% if certificado.expirado %}border-red-300 bg-red-50 text-brand-900{% else %}text-slate-600{% endif %}">
         {% if certificado.proprietario %}
         <p><span class="font-medium">Titular:</span> {{ certificado.proprietario }}</p>
         {% endif %}
@@ -36,7 +36,7 @@
         {% if certificado.erro_leitura %}
         <p class="text-red-600">{{ certificado.erro_leitura }}</p>
         {% endif %}
-        <p class="text-xs text-slate-400">Arquivo: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.</p>
+        <p class="text-xs {% if certificado.expirado %}text-brand-900{% else %}text-slate-400{% endif %}">Arquivo: {{ certificado.tamanho_kb }} KB, atualizado em {{ certificado.modificado_em }}.</p>
         <a href="/configuracoes/certificado/baixar" class="inline-block text-sm font-medium text-brand-600 underline mt-1">Baixar arquivo do certificado (.pfx)</a>
     </div>
     {% else %}
@@ -45,12 +45,12 @@
 
     <form method="post" action="/configuracoes/certificado" enctype="multipart/form-data" class="space-y-4">
         <div>
-            <label class="block text-sm font-medium mb-1">Arquivo do certificado (.pfx)</label>
-            <input type="file" name="arquivo" accept=".pfx,.p12" required class="w-full border rounded px-3 py-2">
+            <label for="arquivo" class="block text-sm font-medium mb-1">Arquivo do certificado (.pfx)</label>
+            <input type="file" id="arquivo" name="arquivo" accept=".pfx,.p12" required class="w-full border rounded px-3 py-2">
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Senha do certificado</label>
-            <input type="password" name="senha" required class="w-full border rounded px-3 py-2">
+            <label for="senha" class="block text-sm font-medium mb-1">Senha do certificado</label>
+            <input type="password" id="senha" name="senha" required class="w-full border rounded px-3 py-2">
         </div>
         <button type="submit" class="w-full bg-brand-500 text-white py-3 rounded font-bold text-lg">Salvar certificado</button>
     </form>

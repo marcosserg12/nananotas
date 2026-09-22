@@ -4,37 +4,37 @@
 <h1 class="text-2xl font-bold mb-4">{{ "Editar produto" if produto else "Novo produto" }}</h1>
 <form method="post" action="{{ '/produtos/%d/editar'|format(produto.id) if produto else '/produtos/novo' }}" class="bg-white p-6 rounded shadow space-y-4 max-w-lg">
     <div>
-        <label class="block text-sm font-medium">Código interno</label>
-        <input type="text" name="codigo_interno" value="{{ produto.codigo_interno if produto else '' }}" required class="w-full border rounded px-3 py-2">
+        <label for="codigo_interno" class="block text-sm font-medium">Código interno</label>
+        <input type="text" id="codigo_interno" name="codigo_interno" value="{{ produto.codigo_interno if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Nome</label>
-        <input type="text" name="nome" value="{{ produto.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
+        <label for="nome" class="block text-sm font-medium">Nome</label>
+        <input type="text" id="nome" name="nome" value="{{ produto.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Categoria</label>
-        <input type="text" name="categoria_nome" value="{{ produto.categoria.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
+        <label for="categoria_nome" class="block text-sm font-medium">Categoria</label>
+        <input type="text" id="categoria_nome" name="categoria_nome" value="{{ produto.categoria.nome if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Código do fabricante</label>
-        <input type="text" name="codigo_fabricante" value="{{ produto.codigo_fabricante or '' if produto else '' }}" class="w-full border rounded px-3 py-2">
+        <label for="codigo_fabricante" class="block text-sm font-medium">Código do fabricante</label>
+        <input type="text" id="codigo_fabricante" name="codigo_fabricante" value="{{ produto.codigo_fabricante or '' if produto else '' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">NCM</label>
-        <input type="text" name="ncm" value="{{ produto.ncm if produto else '' }}" required class="w-full border rounded px-3 py-2">
+        <label for="ncm" class="block text-sm font-medium">NCM</label>
+        <input type="text" id="ncm" name="ncm" value="{{ produto.ncm if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Unidade</label>
-        <input type="text" name="unidade" value="{{ produto.unidade if produto else 'UN' }}" required class="w-full border rounded px-3 py-2">
+        <label for="unidade" class="block text-sm font-medium">Unidade</label>
+        <input type="text" id="unidade" name="unidade" value="{{ produto.unidade if produto else 'UN' }}" required class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Preço de custo</label>
-        <input type="text" name="preco_custo" value="{{ produto.preco_custo if produto else '0' }}" class="w-full border rounded px-3 py-2">
+        <label for="preco_custo" class="block text-sm font-medium">Preço de custo</label>
+        <input type="text" id="preco_custo" name="preco_custo" value="{{ produto.preco_custo if produto else '0' }}" class="w-full border rounded px-3 py-2">
     </div>
     <div>
-        <label class="block text-sm font-medium">Preço de venda</label>
-        <input type="text" name="preco_venda" value="{{ produto.preco_venda if produto else '' }}" required class="w-full border rounded px-3 py-2">
+        <label for="preco_venda" class="block text-sm font-medium">Preço de venda</label>
+        <input type="text" id="preco_venda" name="preco_venda" value="{{ produto.preco_venda if produto else '' }}" required class="w-full border rounded px-3 py-2">
     </div>
-    <button type="submit" class="bg-slate-800 text-white px-4 py-2 rounded">{{ "Salvar alterações" if produto else "Salvar" }}</button>
+    <button type="submit" class="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded">{{ "Salvar alterações" if produto else "Salvar" }}</button>
 </form>
 {% endblock %}

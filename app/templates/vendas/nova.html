@@ -8,7 +8,7 @@
     <form method="post" action="/vendas/nova" class="bg-white p-6 rounded shadow border-t-4 border-brand-500">
         <div class="relative">
             <div class="flex justify-between items-baseline mb-1">
-                <label class="block text-sm font-medium">Cliente</label>
+                <label for="cliente_busca" class="block text-sm font-medium">Cliente</label>
                 <a href="/clientes/novo?voltar=/vendas/nova" class="text-sm text-slate-600 underline">+ Novo cliente</a>
             </div>
             <input type="text" id="cliente_busca" value="{{ cliente_padrao.nome }}"

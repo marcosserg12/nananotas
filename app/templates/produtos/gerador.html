@@ -31,15 +31,18 @@
             <tr class="border-t">
                 <td class="p-2 font-medium" data-label="Produto">{{ linha.produto.codigo_interno }} - {{ linha.produto.nome }}</td>
                 <td class="p-2" data-label="Chance (%)">
-                    <input type="text" inputmode="numeric" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
+                    <label for="chance_{{ linha.produto.id }}" class="sr-only">Chance de aparecer de {{ linha.produto.nome }} (%)</label>
+                    <input type="text" inputmode="numeric" id="chance_{{ linha.produto.id }}" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
                            data-campo-chance class="border rounded px-3 py-2 w-full sm:w-28">
                 </td>
                 <td class="p-2" data-label="Preço mínimo">
-                    <input type="text" inputmode="decimal" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}" placeholder="Ex.: 30,00"
+                    <label for="min_{{ linha.produto.id }}" class="sr-only">Preço mínimo de {{ linha.produto.nome }}</label>
+                    <input type="text" inputmode="decimal" id="min_{{ linha.produto.id }}" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}" placeholder="Ex.: 30,00"
                            class="border rounded px-3 py-2 w-full sm:w-32">
                 </td>
                 <td class="p-2" data-label="Preço máximo">
-                    <input type="text" inputmode="decimal" name="max_{{ linha.produto.id }}" value="{{ linha.preco_max }}" placeholder="Ex.: 45,00"
+                    <label for="max_{{ linha.produto.id }}" class="sr-only">Preço máximo de {{ linha.produto.nome }}</label>
+                    <input type="text" inputmode="decimal" id="max_{{ linha.produto.id }}" name="max_{{ linha.produto.id }}" value="{{ linha.preco_max }}" placeholder="Ex.: 45,00"
                            class="border rounded px-3 py-2 w-full sm:w-32">
                 </td>
             </tr>
