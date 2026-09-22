@@ -2,6 +2,7 @@ import random
 
 import pytest
 
+from app.services import gerador_itens_service
 from app.services.gerador_itens_service import Candidato, montar_itens
 
 CARDAPIO = [
@@ -25,7 +26,7 @@ def _confere_regras(itens, candidatos, total):
         assert candidato.preco_min <= item.preco_unitario <= candidato.preco_max
 
 
-@pytest.mark.parametrize("total", [700, 3000, 4500, 6000, 9999, 14000, 14001, 25050, 100000])
+@pytest.mark.parametrize("total", [700, 3000, 4500, 6000, 9999, 14000, 14001, 25050, 55000])
 def test_fecha_o_valor_exato_e_respeita_as_faixas_de_preco(total):
     for semente in range(40):
         itens = montar_itens(total, CARDAPIO, random.Random(semente))
@@ -121,8 +122,25 @@ def test_faixa_de_preco_invalida_da_erro():
 
 
 @pytest.mark.parametrize("total", [8750, 9999, 14000, 25001, 60000])
-def test_cardapio_comum_nao_repete_o_mesmo_produto_em_duas_linhas(total):
+def test_cardapio_comum_nunca_tem_uma_linha_com_quantidade_absurda(total):
+    """Achado real de uso: pra fechar um valor alto com poucos produtos
+    disponíveis, uma versão antiga do algoritmo inflava a quantidade de uma
+    única linha (ex.: "18 sucos" pra fechar R$ 160) -- nada realista. Uma nota
+    de verdade tem VÁRIOS itens (às vezes o mesmo produto em mais de uma
+    linha, cada um com seu preço), não uma quantidade gigante numa linha só."""
     for semente in range(100):
-        ids = [item.produto_id for item in montar_itens(total, CARDAPIO, random.Random(semente))]
+        itens = montar_itens(total, CARDAPIO, random.Random(semente))
 
-        assert len(ids) == len(set(ids))
+        assert all(item.quantidade <= gerador_itens_service.QTD_LINHA_MAXIMA for item in itens)
+
+
+@pytest.mark.parametrize("total", [25001, 60000])
+def test_cardapio_comum_com_valor_alto_ganha_mais_linhas_em_vez_de_mais_quantidade(total):
+    """Complementa o teste acima: confirma que fechar um valor bem maior que
+    o produto mais caro do cardápio resulta em MAIS linhas (o comportamento
+    novo), e não numa única linha esticada."""
+    linhas_por_tentativa = [
+        len(montar_itens(total, CARDAPIO, random.Random(semente))) for semente in range(30)
+    ]
+
+    assert max(linhas_por_tentativa) > 2

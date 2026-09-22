@@ -9,8 +9,11 @@ a conversão de/para `Decimal` fica com quem chama.
 Como funciona, em resumo:
 1. Cada produto do gerador "sorteia" se entra na lista, com a chance
    configurada (1-100%).
-2. As quantidades vão subindo (com preferência pros produtos mais caros e mais
-   frequentes) até o valor-alvo ficar no meio da faixa de preços possível.
+2. Pra fechar o valor, prefere ADICIONAR mais produtos (variedade) a inflar a
+   quantidade de um só -- cada linha fica pequena (no máximo
+   `QTD_LINHA_MAXIMA`), como um pedido de verdade. Um mesmo produto pode
+   aparecer em mais de uma linha (ex.: duas refeições em dias diferentes de
+   preço), mas nunca "18 sucos iguais" numa linha só só pra bater o total.
 3. Uma linha de quantidade 1 fica reservada como "balanceadora": os preços
    das outras linhas são escolhidos dentro das faixas e a balanceadora absorve
    os centavos que sobrarem, fechando a conta certinho.
@@ -18,9 +21,15 @@ Como funciona, em resumo:
 
 import math
 import random
+from collections import Counter
 from dataclasses import dataclass
 
-QTD_BASE_MAXIMA = 6
+# Tetos pequenos de propósito: uma nota de verdade não tem "18 sucos" numa
+# linha só (QTD_LINHA_MAXIMA), nem 23 linhas separadas do mesmo suco pra
+# fechar um valor alto (LINHAS_POR_PRODUTO_MAXIMA) -- ela tem vários itens
+# DIFERENTES. Ver o loop de variedade em `_tentar` abaixo.
+QTD_LINHA_MAXIMA = 3
+LINHAS_POR_PRODUTO_MAXIMA = 3
 TENTATIVAS = 600
 
 
@@ -146,30 +155,64 @@ def _tentar(
             return None
         linhas.remove(rng.choice(removiveis))
 
-    def limite_qtd(linha: _Linha) -> int:
-        return max(QTD_BASE_MAXIMA, math.ceil(total / linha.cand.preco_max))
-
     # Onde o valor-alvo deve cair dentro da faixa de preços possível: perto de
     # 0 = muitos itens com preço perto do mínimo; perto de 1 = poucos itens com
     # preço perto do máximo. Sorteado a cada tentativa pra variar a composição.
     posicao_alvo = rng.uniform(0.15, 0.85)
+    contagem_linhas = Counter(linha.cand.produto_id for linha in linhas)
 
     while True:
         minimo, maximo = _minimo(linhas), _maximo(linhas)
         if maximo >= total and (total - minimo) <= posicao_alvo * (maximo - minimo):
             break
+
+        # 1) Primeiro tenta aumentar a quantidade de uma linha que já está na
+        #    nota (até o teto pequeno) -- é o jeito "padrão" de crescer, e
+        #    mantém a composição que o sorteio inicial (a chance de cada
+        #    produto) já decidiu.
         opcoes = [
-            linha for linha in linhas if linha.q < limite_qtd(linha) and minimo + linha.cand.preco_min <= total
+            linha for linha in linhas if linha.q < QTD_LINHA_MAXIMA and minimo + linha.cand.preco_min <= total
         ]
         if opcoes:
             escolhida = _sortear_ponderado(rng, opcoes, lambda l: l.cand.chance * l.cand.preco_max)
             escolhida.q += 1
             continue
+
+        # 2) Todas as linhas atuais já estão no teto de quantidade: em vez de
+        #    trazer um produto que nem tinha sido sorteado pra esta nota,
+        #    prefere abrir uma NOVA linha de um produto que a nota JÁ tem
+        #    (com seu próprio preço, sorteado depois) -- é o que dá "duas
+        #    refeições em preços diferentes" em vez de inflar quantidade, sem
+        #    forçar produto de chance baixa a aparecer sem necessidade. Mas só
+        #    até `LINHAS_POR_PRODUTO_MAXIMA`: sem esse teto, um valor alto com
+        #    poucos produtos sorteados virava uma nota inteira de "23 linhas
+        #    de suco" -- também nada realista, só trocando "quantidade demais"
+        #    por "linhas demais" do mesmo item.
         ja_usados = {linha.cand.produto_id for linha in linhas}
-        extras = [c for c in acessiveis if c.produto_id not in ja_usados and minimo + c.preco_min <= total]
-        if extras:
-            linhas.append(_Linha(_sortear_ponderado(rng, extras, lambda c: c.chance)))
+        repetiveis = [
+            c
+            for c in acessiveis
+            if c.produto_id in ja_usados
+            and contagem_linhas[c.produto_id] < LINHAS_POR_PRODUTO_MAXIMA
+            and minimo + c.preco_min <= total
+        ]
+        if repetiveis:
+            escolhido = _sortear_ponderado(rng, repetiveis, lambda c: c.chance)
+            linhas.append(_Linha(escolhido))
+            contagem_linhas[escolhido.produto_id] += 1
             continue
+
+        # 3) Nenhum produto já usado consegue mais espaço (atingiu o teto de
+        #    linhas) -- agora sim traz um produto que a nota ainda não tinha,
+        #    o que mantém a nota variada em vez de repetir os mesmos 1 ou 2
+        #    produtos indefinidamente.
+        novos = [c for c in acessiveis if c.produto_id not in ja_usados and minimo + c.preco_min <= total]
+        if novos:
+            escolhido = _sortear_ponderado(rng, novos, lambda c: c.chance)
+            linhas.append(_Linha(escolhido))
+            contagem_linhas[escolhido.produto_id] += 1
+            continue
+
         if maximo >= total:
             break
         return None
