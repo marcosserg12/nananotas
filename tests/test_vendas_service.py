@@ -199,3 +199,20 @@ def test_listar_orcamentos_exclui_venda_cancelada(db_session):
     resultado = vendas_service.listar_orcamentos(db_session)
 
     assert venda.id not in [v.id for v in resultado]
+
+
+@pytest.mark.parametrize(
+    "quantidade, esperado",
+    [
+        (Decimal("3.00"), "3"),
+        (Decimal("1.00"), "1"),
+        (Decimal("10.00"), "10"),
+        (Decimal("2.50"), "2.5"),
+        (Decimal("0.10"), "0.1"),
+    ],
+)
+def test_formatar_quantidade_esconde_zeros_decimais_de_numero_inteiro(quantidade, esperado):
+    """Pedido real: a tela mostrava "3.00", "1.00" -- ruído visual pra
+    quantidades que são sempre números inteiros no dia a dia da lanchonete.
+    Mantém as casas decimais só quando a quantidade é mesmo fracionária."""
+    assert vendas_service.formatar_quantidade(quantidade) == esperado

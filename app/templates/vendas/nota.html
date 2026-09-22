@@ -65,7 +65,7 @@
             {% for item in venda.itens %}
             <tr>
                 <td class="pr-4" data-label="Produto">{{ item.produto.nome }}</td>
-                <td class="pr-4" data-label="Qtd">{{ item.quantidade }}</td>
+                <td class="pr-4" data-label="Qtd">{{ formatar_quantidade(item.quantidade) }}</td>
                 <td class="pr-4" data-label="Preço unit.">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
                 <td data-label="Total">R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
             </tr>
@@ -92,8 +92,8 @@
     <summary class="cursor-pointer text-slate-600 underline">Já emiti essa nota por fora e só quero registrar a chave de acesso</summary>
     <form method="post" action="/vendas/{{ venda.id }}/nota/marcar-manual" class="flex flex-wrap gap-2 items-end mt-2">
         <div>
-            <label class="block text-sm">Chave de acesso da nota (opcional)</label>
-            <input type="text" name="chave_acesso" maxlength="44" class="border rounded px-3 py-2 w-full sm:w-72">
+            <label for="chave_acesso" class="block text-sm">Chave de acesso da nota (opcional)</label>
+            <input type="text" id="chave_acesso" name="chave_acesso" maxlength="44" class="border rounded px-3 py-2 w-full sm:w-72">
         </div>
         <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">Marcar nota como emitida</button>
     </form>

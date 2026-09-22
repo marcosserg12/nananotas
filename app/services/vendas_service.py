@@ -202,3 +202,13 @@ def recalcular_total(db: Session, venda_id: int) -> Decimal:
     venda.valor_total = total
     db.commit()
     return total
+
+
+def formatar_quantidade(quantidade: Decimal) -> str:
+    """Mostra a quantidade sem casas decimais quando ela é um número inteiro
+    -- o caso de quase todo produto aqui (unidades, não peso), onde "3.00"
+    era só ruído visual sem informação a mais. Se algum dia um item tiver
+    quantidade fracionária de verdade, continua mostrando as casas decimais."""
+    if quantidade == quantidade.to_integral_value():
+        return str(int(quantidade))
+    return f"{quantidade:.2f}".rstrip("0").rstrip(".")

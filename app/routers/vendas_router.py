@@ -73,6 +73,7 @@ def _tela_do_orcamento(
             "linhas_gerador": produtos_service.linhas_config_gerador(produtos, digitado),
             "erro": erro,
             "valor_digitado": valor_digitado,
+            "formatar_quantidade": vendas_service.formatar_quantidade,
         },
         status_code=status_code,
     )
@@ -155,7 +156,10 @@ def adicionar_item(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     venda = db.get(Venda, venda_id)
-    return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
+    return templates.TemplateResponse(
+        "vendas/_itens.html",
+        {"request": request, "venda": venda, "formatar_quantidade": vendas_service.formatar_quantidade},
+    )
 
 
 @router.post("/itens/{item_id}/remover", response_class=HTMLResponse)
@@ -166,7 +170,10 @@ def remover_item(item_id: int, request: Request, db: Session = Depends(get_db), 
     venda_id = item.venda_id
     vendas_service.remover_item(db, item_id)
     venda = db.get(Venda, venda_id)
-    return templates.TemplateResponse("vendas/_itens.html", {"request": request, "venda": venda})
+    return templates.TemplateResponse(
+        "vendas/_itens.html",
+        {"request": request, "venda": venda, "formatar_quantidade": vendas_service.formatar_quantidade},
+    )
 
 
 @router.get("/{venda_id}/pagamento", response_class=HTMLResponse)

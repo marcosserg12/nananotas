@@ -13,7 +13,7 @@
         {% for item in venda.itens %}
         <tr class="border-t">
             <td class="p-2" data-label="Produto">{{ item.produto.nome }}</td>
-            <td class="p-2" data-label="Qtd">{{ item.quantidade }}</td>
+            <td class="p-2" data-label="Qtd">{{ formatar_quantidade(item.quantidade) }}</td>
             <td class="p-2" data-label="Preço unit.">R$ {{ "%.2f"|format(item.preco_unitario) }}</td>
             <td class="p-2" data-label="Total">R$ {{ "%.2f"|format(item.quantidade * item.preco_unitario) }}</td>
             <td class="p-2" data-label="Ações">

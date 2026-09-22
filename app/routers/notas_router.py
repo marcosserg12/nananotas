@@ -13,7 +13,7 @@ from app.models.nota_fiscal import NotaFiscal
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
 from app.models.venda import Venda
-from app.services import danfe_pdf_service, notas_service
+from app.services import danfe_pdf_service, notas_service, vendas_service
 from app.services.fiscal.base import FiscalProvider
 
 router = APIRouter(prefix="/vendas")
@@ -63,6 +63,7 @@ def ver_nota(venda_id: int, request: Request, db: Session = Depends(get_db), usu
             "bandeiras": BANDEIRAS_CARTAO,
             "formas_pagamento": FORMAS_PAGAMENTO_LABELS,
             "formatar_data_hora_local": notas_service.formatar_data_hora_local,
+            "formatar_quantidade": vendas_service.formatar_quantidade,
         },
     )
 
