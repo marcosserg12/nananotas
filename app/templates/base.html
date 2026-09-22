@@ -318,6 +318,15 @@
             border: none;
         }
         .modal-confirmar-btn-confirmar:hover { filter: brightness(1.1); box-shadow: 0 8px 20px -8px rgba(24, 21, 19, .4); }
+
+        [data-total-chance] {
+            display: inline-block;
+            font-weight: 700;
+            color: #4A4442;
+        }
+        [data-total-chance].aviso-chance-acima {
+            color: #C8102E;
+        }
     </style>
 </head>
 <body class="text-slate-800">
@@ -457,49 +466,28 @@
     </script>
     <script>
         // Usado nas telas do gerador de valor (Produtos > Gerador de valor, e o
-        // ajuste "só desta nota" no orçamento): os campos de "chance (%)" de
-        // um mesmo grupo se comportam como fatias de uma pizza de 100% -- mudar
-        // um redistribui a diferença nos outros, proporcionalmente ao que cada
-        // um já tinha, em vez de deixar a pessoa fazer essa conta na mão pra
-        // sempre bater 100 no total.
-        function ativarAjusteDeChance(escopo) {
+        // ajuste "só desta nota" no orçamento): cada campo de "chance (%)" é
+        // livre (não mexe nos outros -- editar refeição não devia bagunçar o
+        // padrão que já tava certo em lanches, água etc.). Só soma tudo e
+        // avisa quando passar de 100%, sem travar nem reescrever nada sozinho.
+        function ativarAvisoDeChance(escopo) {
             var campos = Array.prototype.slice.call(escopo.querySelectorAll("[data-campo-chance]"));
-            if (campos.length < 2) return;
+            var aviso = escopo.querySelector("[data-total-chance]");
+            if (!campos.length || !aviso) return;
 
             function valor(campo) {
                 var numero = parseInt(campo.value, 10);
-                if (isNaN(numero)) return 0;
-                return Math.max(0, Math.min(100, numero));
+                return isNaN(numero) ? 0 : numero;
             }
 
-            campos.forEach(function (editado) {
-                editado.addEventListener("input", function () {
-                    var novoValorEditado = valor(editado);
-                    editado.value = String(novoValorEditado);
+            function atualizar() {
+                var total = campos.reduce(function (soma, campo) { return soma + valor(campo); }, 0);
+                aviso.textContent = "Total: " + total + "%" + (total > 100 ? " -- acima de 100%" : "");
+                aviso.classList.toggle("aviso-chance-acima", total > 100);
+            }
 
-                    var outros = campos.filter(function (campo) { return campo !== editado; });
-                    var alvoOutros = 100 - novoValorEditado;
-                    var somaAtualOutros = outros.reduce(function (soma, campo) { return soma + valor(campo); }, 0);
-                    var acumulado = 0;
-
-                    outros.forEach(function (campo, indice) {
-                        var ehUltimo = indice === outros.length - 1;
-                        var novoValor;
-                        if (ehUltimo) {
-                            // o último absorve o que sobrou do arredondamento,
-                            // garantindo que a soma final seja sempre 100.
-                            novoValor = alvoOutros - acumulado;
-                        } else if (somaAtualOutros > 0) {
-                            novoValor = Math.round((valor(campo) / somaAtualOutros) * alvoOutros);
-                        } else {
-                            novoValor = Math.round(alvoOutros / outros.length);
-                        }
-                        novoValor = Math.max(0, Math.min(100, novoValor));
-                        acumulado += novoValor;
-                        campo.value = String(novoValor);
-                    });
-                });
-            });
+            campos.forEach(function (campo) { campo.addEventListener("input", atualizar); });
+            atualizar();
         }
     </script>
     {% endif %}

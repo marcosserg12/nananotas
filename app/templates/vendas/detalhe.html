@@ -39,7 +39,7 @@
             <summary class="cursor-pointer text-slate-700 underline">Ajustar produtos e preços só desta nota</summary>
             <p class="text-sm text-slate-500 mt-2 mb-2">
                 Já vem preenchido com o padrão de cada produto. Mude o que quiser: vale só para esta nota.
-                As porcentagens de chance somam 100% sozinhas -- mudar uma ajusta as outras.
+                Cada chance é independente -- não precisa somar 100%.
                 Deixe o preço mínimo e máximo <strong>em branco</strong> para não usar o produto nesta nota.
             </p>
             <div class="rounded overflow-hidden tabela-scroll" style="border: 1px solid #EDEBE9;">
@@ -73,6 +73,7 @@
                 </tbody>
             </table>
             </div>
+            <p class="mt-2"><span data-total-chance>Total: 0%</span></p>
             <label class="flex items-center gap-3 mt-3 cursor-pointer">
                 <input type="checkbox" name="salvar_padrao" value="on" class="w-6 h-6 accent-red-700">
                 <span>Guardar estes valores como o novo padrão para as próximas notas</span>
@@ -81,7 +82,7 @@
     </form>
 </div>
 <script>
-    ativarAjusteDeChance(document.getElementById("tabela_gerador_nota"));
+    ativarAvisoDeChance(document.getElementById("form_gerar_itens"));
 </script>
 {% endif %}
 

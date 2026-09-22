@@ -15,7 +15,7 @@
 <p class="bg-red-700 text-white px-4 py-3 rounded mb-4">{{ erro }}</p>
 {% endif %}
 
-<form method="post" action="/produtos/gerador">
+<form method="post" action="/produtos/gerador" id="form_gerador_padrao">
     <div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
     <table class="w-full" id="tabela_gerador_padrao">
         <thead class="bg-slate-100 text-left">
@@ -53,8 +53,10 @@
     </table>
     </div>
 
+    <p class="mb-4"><span data-total-chance>Total: 0%</span></p>
+
     <ul class="text-sm text-slate-600 mb-4 max-w-3xl list-disc pl-5 space-y-1">
-        <li><strong>Chance:</strong> as porcentagens de todos os produtos juntas somam 100% -- mudar uma ajusta as outras sozinho.</li>
+        <li><strong>Chance:</strong> cada produto é independente -- não precisa somar 100%. Se a soma passar de 100%, o campo acima avisa (não trava nada).</li>
         <li><strong>Preço:</strong> em cada venda, o sistema escolhe um preço entre o mínimo e o máximo. Quanto maior a diferença entre eles, mais fácil é fechar o valor exato.</li>
         <li>Deixe o preço mínimo e o máximo <strong>em branco</strong> para o produto <strong>não</strong> entrar no gerador.</li>
     </ul>
@@ -62,6 +64,6 @@
     <button type="submit" class="bg-brand-500 text-white px-6 py-3 rounded font-bold text-lg">Salvar configuração</button>
 </form>
 <script>
-    ativarAjusteDeChance(document.getElementById("tabela_gerador_padrao"));
+    ativarAvisoDeChance(document.getElementById("form_gerador_padrao"));
 </script>
 {% endblock %}
