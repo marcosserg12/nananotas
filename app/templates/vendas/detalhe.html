@@ -39,10 +39,11 @@
             <summary class="cursor-pointer text-slate-700 underline">Ajustar produtos e preços só desta nota</summary>
             <p class="text-sm text-slate-500 mt-2 mb-2">
                 Já vem preenchido com o padrão de cada produto. Mude o que quiser: vale só para esta nota.
+                As porcentagens de chance somam 100% sozinhas -- mudar uma ajusta as outras.
                 Deixe o preço mínimo e máximo <strong>em branco</strong> para não usar o produto nesta nota.
             </p>
             <div class="rounded overflow-hidden tabela-scroll" style="border: 1px solid #EDEBE9;">
-            <table class="w-full">
+            <table class="w-full" id="tabela_gerador_nota">
                 <thead class="bg-slate-100 text-left">
                     <tr>
                         <th class="p-2">Produto</th>
@@ -57,7 +58,7 @@
                         <td class="p-2 font-medium" data-label="Produto">{{ linha.produto.nome }}</td>
                         <td class="p-2" data-label="Chance (%)">
                             <input type="text" inputmode="numeric" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
-                                   class="border rounded px-3 py-2 w-full sm:w-24">
+                                   data-campo-chance class="border rounded px-3 py-2 w-full sm:w-24">
                         </td>
                         <td class="p-2" data-label="Preço mínimo">
                             <input type="text" inputmode="decimal" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}"
@@ -79,6 +80,9 @@
         </details>
     </form>
 </div>
+<script>
+    ativarAjusteDeChance(document.getElementById("tabela_gerador_nota"));
+</script>
 {% endif %}
 
 <div class="bg-white p-4 rounded shadow mb-4 relative">

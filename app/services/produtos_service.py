@@ -33,11 +33,13 @@ def obter_ou_criar_categoria(db: Session, nome: str) -> Categoria:
 
 
 def validar_faixa_gerador(chance: int | None, minimo: Decimal | None, maximo: Decimal | None) -> None:
-    """Chance entre 1 e 100; a faixa de preço é opcional (sem ela o produto
-    simplesmente não entra no gerador), mas se vier tem que estar completa e
-    coerente -- senão o gerador falharia só na hora de vender."""
-    if chance is None or not 1 <= chance <= 100:
-        raise ValueError("A chance de aparecer precisa estar entre 1 e 100")
+    """Chance entre 0 e 100 (0 = a tela de ajuste automático das porcentagens
+    -- ver `ativarAjusteDeChance` em base.html -- pode zerar um produto ao
+    redistribuir os outros até 100%); a faixa de preço é opcional (sem ela o
+    produto simplesmente não entra no gerador), mas se vier tem que estar
+    completa e coerente -- senão o gerador falharia só na hora de vender."""
+    if chance is None or not 0 <= chance <= 100:
+        raise ValueError("A chance de aparecer precisa estar entre 0 e 100")
     if minimo is None and maximo is None:
         return
     if minimo is None or maximo is None:

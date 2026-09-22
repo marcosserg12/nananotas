@@ -39,8 +39,8 @@ def test_criar_produto_com_faixa_guarda_a_configuracao(db_session):
 @pytest.mark.parametrize(
     "extras, mensagem",
     [
-        ({"gerador_chance": 0}, "entre 1 e 100"),
-        ({"gerador_chance": 101}, "entre 1 e 100"),
+        ({"gerador_chance": -1}, "entre 0 e 100"),
+        ({"gerador_chance": 101}, "entre 0 e 100"),
         ({"gerador_preco_min": Decimal("1")}, "ou deixe os dois em branco"),
         ({"gerador_preco_max": Decimal("2")}, "ou deixe os dois em branco"),
         ({"gerador_preco_min": Decimal("0"), "gerador_preco_max": Decimal("2")}, "maior que zero"),
@@ -187,7 +187,7 @@ def test_salvar_com_faixa_invertida_volta_com_erro_e_mantem_o_que_foi_digitado(a
     "campos, trecho",
     [
         ({"chance": "muita", "minimo": "1", "maximo": "2"}, "chance inválida"),
-        ({"chance": "0", "minimo": "1", "maximo": "2"}, "entre 1 e 100"),
+        ({"chance": "-5", "minimo": "1", "maximo": "2"}, "entre 0 e 100"),
         ({"chance": "100", "minimo": "abc", "maximo": "2"}, "Valor inválido"),
         ({"chance": "100", "minimo": "5", "maximo": ""}, "ou deixe os dois em branco"),
     ],
@@ -207,7 +207,11 @@ def test_salvar_com_valores_invalidos_retorna_400(authed_client, db_session, cam
 def test_formulario_de_produto_nao_tem_mais_campos_do_gerador(authed_client):
     pagina = authed_client.get("/produtos/novo")
 
-    assert "gerador" not in pagina.text.lower()
+    # A palavra "gerador" ainda aparece na página (o JS compartilhado de
+    # base.html usado por outras telas), mas nenhum campo do formulário de
+    # produto em si deve mencioná-la -- é essa a garantia que interessa aqui.
+    assert 'name="gerador' not in pagina.text
+    assert "gerador_ativo" not in pagina.text
 
 
 def test_lista_de_produtos_tem_link_pro_gerador_e_mostra_a_faixa_de_cada_um(authed_client, db_session):

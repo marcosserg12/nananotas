@@ -455,6 +455,53 @@
             });
         })();
     </script>
+    <script>
+        // Usado nas telas do gerador de valor (Produtos > Gerador de valor, e o
+        // ajuste "só desta nota" no orçamento): os campos de "chance (%)" de
+        // um mesmo grupo se comportam como fatias de uma pizza de 100% -- mudar
+        // um redistribui a diferença nos outros, proporcionalmente ao que cada
+        // um já tinha, em vez de deixar a pessoa fazer essa conta na mão pra
+        // sempre bater 100 no total.
+        function ativarAjusteDeChance(escopo) {
+            var campos = Array.prototype.slice.call(escopo.querySelectorAll("[data-campo-chance]"));
+            if (campos.length < 2) return;
+
+            function valor(campo) {
+                var numero = parseInt(campo.value, 10);
+                if (isNaN(numero)) return 0;
+                return Math.max(0, Math.min(100, numero));
+            }
+
+            campos.forEach(function (editado) {
+                editado.addEventListener("input", function () {
+                    var novoValorEditado = valor(editado);
+                    editado.value = String(novoValorEditado);
+
+                    var outros = campos.filter(function (campo) { return campo !== editado; });
+                    var alvoOutros = 100 - novoValorEditado;
+                    var somaAtualOutros = outros.reduce(function (soma, campo) { return soma + valor(campo); }, 0);
+                    var acumulado = 0;
+
+                    outros.forEach(function (campo, indice) {
+                        var ehUltimo = indice === outros.length - 1;
+                        var novoValor;
+                        if (ehUltimo) {
+                            // o último absorve o que sobrou do arredondamento,
+                            // garantindo que a soma final seja sempre 100.
+                            novoValor = alvoOutros - acumulado;
+                        } else if (somaAtualOutros > 0) {
+                            novoValor = Math.round((valor(campo) / somaAtualOutros) * alvoOutros);
+                        } else {
+                            novoValor = Math.round(alvoOutros / outros.length);
+                        }
+                        novoValor = Math.max(0, Math.min(100, novoValor));
+                        acumulado += novoValor;
+                        campo.value = String(novoValor);
+                    });
+                });
+            });
+        }
+    </script>
     {% endif %}
     <main class="p-4 sm:p-6 max-w-6xl mx-auto" style="padding-bottom: 6rem;">
         {% block content %}{% endblock %}

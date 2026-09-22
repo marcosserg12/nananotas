@@ -17,7 +17,7 @@
 
 <form method="post" action="/produtos/gerador">
     <div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
-    <table class="w-full">
+    <table class="w-full" id="tabela_gerador_padrao">
         <thead class="bg-slate-100 text-left">
             <tr>
                 <th class="p-2">Produto</th>
@@ -32,7 +32,7 @@
                 <td class="p-2 font-medium" data-label="Produto">{{ linha.produto.codigo_interno }} - {{ linha.produto.nome }}</td>
                 <td class="p-2" data-label="Chance (%)">
                     <input type="text" inputmode="numeric" name="chance_{{ linha.produto.id }}" value="{{ linha.chance }}"
-                           class="border rounded px-3 py-2 w-full sm:w-28">
+                           data-campo-chance class="border rounded px-3 py-2 w-full sm:w-28">
                 </td>
                 <td class="p-2" data-label="Preço mínimo">
                     <input type="text" inputmode="decimal" name="min_{{ linha.produto.id }}" value="{{ linha.preco_min }}" placeholder="Ex.: 30,00"
@@ -54,11 +54,14 @@
     </div>
 
     <ul class="text-sm text-slate-600 mb-4 max-w-3xl list-disc pl-5 space-y-1">
-        <li><strong>Chance:</strong> 100 aparece quase sempre; 20 aparece em cerca de 1 a cada 5 vendas.</li>
+        <li><strong>Chance:</strong> as porcentagens de todos os produtos juntas somam 100% -- mudar uma ajusta as outras sozinho.</li>
         <li><strong>Preço:</strong> em cada venda, o sistema escolhe um preço entre o mínimo e o máximo. Quanto maior a diferença entre eles, mais fácil é fechar o valor exato.</li>
         <li>Deixe o preço mínimo e o máximo <strong>em branco</strong> para o produto <strong>não</strong> entrar no gerador.</li>
     </ul>
 
     <button type="submit" class="bg-brand-500 text-white px-6 py-3 rounded font-bold text-lg">Salvar configuração</button>
 </form>
+<script>
+    ativarAjusteDeChance(document.getElementById("tabela_gerador_padrao"));
+</script>
 {% endblock %}

@@ -15,7 +15,17 @@ def test_painel_mostra_hora_convertida_para_brasilia_nao_utc_cru(authed_client, 
     vendas_service.adicionar_item(db_session, venda.id, produto.id, Decimal("1"))
     parcelas_service.confirmar_venda(db_session, venda.id, Decimal("10.00"))
 
-    venda.data_venda = venda.data_venda.replace(hour=14, minute=30)
+    # Fixa a DATA em "hoje" segundo Brasília (não a data que `utcnow()`
+    # calhou de gravar) -- entre 00h e 03h UTC, "hoje em Brasília" ainda é o
+    # dia UTC anterior, então só sobrescrever hora/minuto (mantendo a data
+    # crua de `utcnow()`) fazia esta venda cair fora da janela de
+    # `vendas_do_dia` durante essa janela de 3h por dia, tornando o teste
+    # intermitente sem relação nenhuma com o bug que ele testa.
+    dia_hoje_brasilia = dashboard_service._hoje_brasilia()
+    venda.data_venda = venda.data_venda.replace(
+        year=dia_hoje_brasilia.year, month=dia_hoje_brasilia.month, day=dia_hoje_brasilia.day,
+        hour=14, minute=30,
+    )
     db_session.commit()
 
     response = authed_client.get("/")
