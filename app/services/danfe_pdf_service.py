@@ -17,6 +17,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from jinja2 import Environment, FileSystemLoader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from xhtml2pdf import pisa
 
 from app.config import settings
@@ -29,16 +30,39 @@ from app.services.fiscal.sefaz_direto.xml_builder import FUSO_BRASILIA
 _env = Environment(loader=FileSystemLoader("app/templates"))
 
 # xhtml2pdf (pisa) não suporta `@page { size: 80mm auto }` -- cai
-# silenciosamente para o tamanho A4 padrão, o que deixava a folha
-# gigantesca e cheia de espaço em branco embaixo. Como não há como pedir
-# "altura automática" de verdade, calculamos uma altura fixa a partir da
-# quantidade de itens (cada item novo empurra o restante do cupom pra
-# baixo) -- não é uma medida exata, mas evita tanto o espaço em branco
-# excessivo quanto o cupom estourar pra uma segunda página nos casos
-# comuns (poucos itens).
+# silenciosamente para o tamanho A4 padrão, o que deixava a folha gigantesca
+# e cheia de espaço em branco embaixo. Como não há como pedir "altura
+# automática" de verdade, calculamos uma altura fixa antes de renderizar.
+#
+# A primeira versão dessa conta assumia 1 linha por item (uma "altura por
+# item" fixa em mm) -- e estourava pra uma segunda página sempre que a
+# DESCRIÇÃO DE ALGUM ITEM QUEBRAVA EM MAIS DE UMA LINHA (nome de produto
+# comprido para a coluna), porque cada linha extra que o navegador/pisa
+# desenhava não tinha sido contabilizada. Como a maioria dos nomes de
+# lanchonete tem mais de uma palavra, isso acontecia com bastante
+# frequência, não só com "muitos itens".
+#
+# A conta abaixo resolve isso quebrando o MESMO texto que vai pro HTML com a
+# métrica de fonte real do reportlab (o motor que o xhtml2pdf usa por baixo
+# dos panos pra desenhar texto) -- ou seja, contamos as linhas do jeito que
+# o renderizador final vai efetivamente quebrar, em vez de arriscar um
+# "número de caracteres por linha" chutado. Fazemos isso pra todo texto de
+# tamanho variável do cupom (nome de produto, nome de cliente, razão social,
+# endereço do emitente), não só pros itens -- qualquer um deles pode ser
+# longo o bastante pra quebrar em mais de uma linha.
 _LARGURA_PAGINA_MM = 80
-_ALTURA_BASE_MM = 252
-_ALTURA_POR_ITEM_MM = 6
+_MM_POR_PONTO = 25.4 / 72
+_LARGURA_CONTEUDO_MM = 72.0  # 80mm de página menos as margens de 4mm de cada lado do @page
+_LARGURA_ITEM_MM = 70.0  # coluna de descrição do item, descontando um pequeno respiro interno
+
+# Calibrados renderizando o template real com o xhtml2pdf e medindo a altura
+# de conteúdo efetivamente usada (ver relatório da tarefa) -- não são
+# "chutes", mas também não precisam ser exatos: `_MARGEM_SEGURANCA_MM`
+# absorve a diferença residual entre esta conta e o motor de layout real.
+_ALTURA_ESQUELETO_MM = 192.0  # tudo que não depende de item nenhum, assumindo 1 linha p/ cada texto variável
+_ALTURA_POR_ITEM_MM = 11.5  # por item: 1 linha do nome + 1 linha de qtde/valor
+_ALTURA_LINHA_EXTRA_MM = 6.0  # cada linha ALÉM da primeira, em qualquer texto de tamanho variável
+_MARGEM_SEGURANCA_MM = 8.0
 
 # Texto fixo do aviso da Lei 12.741/2012, reproduzido caractere por caractere
 # (incluindo a grafia sem acentos e sem a barra em "12.741/2012") a partir de
@@ -79,6 +103,64 @@ def _valor(numero: Decimal | None) -> str:
     return f"{numero:.2f}".replace(".", ",")
 
 
+def _contar_linhas(texto: str, largura_mm: float, fonte: str, tamanho_pt: float) -> int:
+    """Conta em quantas linhas o `texto` vai quebrar quando o xhtml2pdf
+    desenhar ele numa caixa de `largura_mm` -- usando a mesma métrica de
+    fonte (reportlab) que o próprio xhtml2pdf usa internamente, em vez de
+    estimar "caracteres por linha" no escuro."""
+    texto = (texto or "").strip()
+    if not texto:
+        return 1
+    largura_pt = largura_mm / _MM_POR_PONTO
+    palavras = texto.split()
+    linhas = 1
+    linha_atual = palavras[0]
+    for palavra in palavras[1:]:
+        candidata = f"{linha_atual} {palavra}"
+        if stringWidth(candidata, fonte, tamanho_pt) <= largura_pt:
+            linha_atual = candidata
+        else:
+            linhas += 1
+            linha_atual = palavra
+    return linhas
+
+
+def _linhas_extras(texto: str, largura_mm: float, fonte: str, tamanho_pt: float) -> int:
+    """Quantas linhas o texto ocupa ALÉM da primeira -- é só essa parte que
+    precisa ser somada na altura da página, já que a primeira linha de cada
+    campo já está contabilizada em `_ALTURA_ESQUELETO_MM`."""
+    return max(0, _contar_linhas(texto, largura_mm, fonte, tamanho_pt) - 1)
+
+
+def _calcular_altura_pagina_mm(
+    *,
+    razao_social: str,
+    cnpj_ie_linha: str,
+    endereco_linha: str,
+    municipio_fone_linha: str,
+    cliente_linha: str,
+    itens: list[dict],
+) -> float:
+    linhas_extras_texto = (
+        _linhas_extras(razao_social, _LARGURA_CONTEUDO_MM, "Courier-Bold", 11)
+        + _linhas_extras(cnpj_ie_linha, _LARGURA_CONTEUDO_MM, "Courier", 8)
+        + _linhas_extras(endereco_linha, _LARGURA_CONTEUDO_MM, "Courier", 8)
+        + _linhas_extras(municipio_fone_linha, _LARGURA_CONTEUDO_MM, "Courier", 8)
+        + _linhas_extras(cliente_linha, _LARGURA_CONTEUDO_MM, "Courier", 7.5)
+        + _linhas_extras(_AVISO_TRIBUTOS, _LARGURA_CONTEUDO_MM, "Courier", 7.5)
+    )
+    linhas_extras_itens = sum(
+        _linhas_extras(f"{item['codigo']}  {item['descricao']}", _LARGURA_ITEM_MM, "Courier-Bold", 8)
+        for item in itens
+    )
+    return (
+        _ALTURA_ESQUELETO_MM
+        + _ALTURA_POR_ITEM_MM * len(itens)
+        + _ALTURA_LINHA_EXTRA_MM * (linhas_extras_texto + linhas_extras_itens)
+        + _MARGEM_SEGURANCA_MM
+    )
+
+
 def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
     template = _env.get_template("vendas/danfe_pdf.html")
 
@@ -108,12 +190,42 @@ def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
         for item in venda.itens
     ]
 
+    emitente_cnpj_formatado = _formatar_cnpj(settings.emitente_cnpj)
+
+    # Estas strings precisam espelhar EXATAMENTE o texto que o template
+    # monta em cada linha (mesmos espaços/separadores) -- é sobre elas que
+    # `_calcular_altura_pagina_mm` mede a quebra de linha real.
+    cnpj_ie_linha = f"CNPJ: {emitente_cnpj_formatado}"
+    if settings.emitente_ie:
+        cnpj_ie_linha += f"  IE: {settings.emitente_ie}"
+    endereco_linha = settings.emitente_endereco_logradouro
+    if settings.emitente_endereco_numero:
+        endereco_linha += f", {settings.emitente_endereco_numero}"
+    if settings.emitente_endereco_bairro:
+        endereco_linha += f" - {settings.emitente_endereco_bairro}"
+    municipio_fone_linha = f"{settings.emitente_endereco_municipio}-{settings.emitente_endereco_uf}"
+    if settings.emitente_telefone:
+        municipio_fone_linha += f"  Fone: {settings.emitente_telefone}"
+    if venda.cliente and not venda.cliente.consumidor_final and venda.cliente.cpf_cnpj:
+        cliente_linha = f"{venda.cliente.nome} — {venda.cliente.cpf_cnpj}"
+    else:
+        cliente_linha = "CONSUMIDOR NÃO IDENTIFICADO"
+
+    altura_pagina_mm = _calcular_altura_pagina_mm(
+        razao_social=settings.emitente_razao_social,
+        cnpj_ie_linha=cnpj_ie_linha,
+        endereco_linha=endereco_linha,
+        municipio_fone_linha=municipio_fone_linha,
+        cliente_linha=cliente_linha,
+        itens=itens,
+    )
+
     html = template.render(
         venda=venda,
         nota=nota,
         itens=itens,
         emitente_razao_social=settings.emitente_razao_social,
-        emitente_cnpj_formatado=_formatar_cnpj(settings.emitente_cnpj),
+        emitente_cnpj_formatado=emitente_cnpj_formatado,
         emitente_ie=settings.emitente_ie,
         emitente_endereco_logradouro=settings.emitente_endereco_logradouro,
         emitente_endereco_numero=settings.emitente_endereco_numero,
@@ -132,7 +244,7 @@ def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
         data_formatada=data_formatada,
         aviso_tributos=_AVISO_TRIBUTOS,
         largura_pagina_mm=_LARGURA_PAGINA_MM,
-        altura_pagina_mm=_ALTURA_BASE_MM + len(itens) * _ALTURA_POR_ITEM_MM,
+        altura_pagina_mm=altura_pagina_mm,
     )
 
     buffer = BytesIO()

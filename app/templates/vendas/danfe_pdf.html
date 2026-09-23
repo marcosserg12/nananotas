@@ -9,73 +9,77 @@
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .small { font-size: 8pt; }
-    .sep { text-align: center; letter-spacing: 1px; margin: 4px 0; }
+    .muted { font-size: 7.5pt; }
+    .upper { text-transform: uppercase; }
+    .loja-nome { font-size: 11pt; font-weight: bold; }
+    hr { border: none; border-top: 0.75pt dashed #000000; margin: 6px 0; }
+    hr.forte { border-top: 1.5pt solid #000000; margin: 5px 0; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 1px 3px; font-size: 7.5pt; font-weight: normal; vertical-align: top; }
-    th { white-space: nowrap; }
+    td { padding: 0; vertical-align: top; }
     .right { text-align: right; }
-    .qrcode { text-align: center; margin: 6px 0; }
-    .qrcode img { width: 130px; height: 130px; }
+    .rotulo { font-size: 7.5pt; letter-spacing: 0.5px; font-weight: bold; }
+
+    .item-linha td { padding-top: 3px; font-size: 8pt; font-weight: bold; }
+    .item-valores td { padding-bottom: 3px; font-size: 7.5pt; }
+
+    .totais td { padding: 1.5px 0; font-size: 8.5pt; }
+    .totais .destaque td { font-size: 9.5pt; font-weight: bold; padding-top: 3px; }
+
+    .qrcode-caixa { text-align: center; margin: 8px 0; }
+    .qrcode-caixa img { width: 124px; height: 124px; border: 1pt solid #000000; padding: 4px; }
+
+    .corte { text-align: center; font-size: 8pt; margin-top: 10px; }
 </style>
 </head>
 <body>
-    <p class="center">{{ emitente_razao_social }}</p>
-    <p class="center small">CNPJ: {{ emitente_cnpj_formatado }}{% if emitente_ie %} IE: {{ emitente_ie }}{% endif %}</p>
-    <p class="center small">{{ emitente_endereco_logradouro }}{% if emitente_endereco_numero %}, {{ emitente_endereco_numero }}{% endif %}</p>
-    {% if emitente_endereco_bairro %}<p class="center small">{{ emitente_endereco_bairro }}</p>{% endif %}
+    <p class="center loja-nome upper">{{ emitente_razao_social }}</p>
+    <p class="center small">CNPJ: {{ emitente_cnpj_formatado }}{% if emitente_ie %}  IE: {{ emitente_ie }}{% endif %}</p>
+    <p class="center small">{{ emitente_endereco_logradouro }}{% if emitente_endereco_numero %}, {{ emitente_endereco_numero }}{% endif %}{% if emitente_endereco_bairro %} - {{ emitente_endereco_bairro }}{% endif %}</p>
     <p class="center small">{{ emitente_endereco_municipio }}-{{ emitente_endereco_uf }}{% if emitente_telefone %}  Fone: {{ emitente_telefone }}{% endif %}</p>
 
-    <p class="sep">{{ "-" * 46 }}</p>
-    <p class="center small">Documento Auxiliar da Nota Fiscal de Consumidor Eletronica</p>
-    <p class="center small">Não permite aproveitamento de crédito de ICMS</p>
-    <p class="sep">{{ "-" * 46 }}</p>
+    <hr class="forte">
+    <p class="center muted">Documento Auxiliar da Nota Fiscal de Consumidor Eletronica</p>
+    <p class="center muted">Não permite aproveitamento de crédito de ICMS</p>
+    <hr>
 
     <table>
-        <thead>
-            <tr>
-                <th style="width: 10%">Código</th>
-                <th style="width: 28%">Descrição</th>
-                <th style="width: 12%">Qtde</th>
-                <th style="width: 8%">UN</th>
-                <th class="right" style="width: 20%">Vl Unit</th>
-                <th class="right" style="width: 22%">Vl Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in itens %}
-            <tr>
-                <td style="width: 10%">{{ item.codigo }}</td>
-                <td style="width: 28%">{{ item.descricao }}</td>
-                <td style="width: 12%">{{ item.quantidade_formatada }}</td>
-                <td style="width: 8%">{{ item.unidade }}</td>
-                <td class="right" style="width: 20%">{{ item.vl_unit_formatado }}</td>
-                <td class="right" style="width: 22%">{{ item.vl_total_formatado }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        <tr><td class="rotulo upper">Item</td><td class="rotulo upper right">Valor</td></tr>
     </table>
-
+    <hr>
     <table>
+        {% for item in itens %}
+        <tr class="item-linha">
+            <td colspan="2">{{ item.codigo }}&nbsp;&nbsp;{{ item.descricao }}</td>
+        </tr>
+        <tr class="item-valores">
+            <td>{{ item.quantidade_formatada }} {{ item.unidade }} x {{ item.vl_unit_formatado }}</td>
+            <td class="right">{{ item.vl_total_formatado }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <hr>
+
+    <table class="totais">
         <tr><td>Qtde total de itens</td><td class="right">{{ qtde_total_itens }}</td></tr>
         <tr><td>Valor Total R$</td><td class="right">{{ valor_total_formatado }}</td></tr>
         <tr><td>Desconto R$</td><td class="right">0,00</td></tr>
-        <tr><td class="bold">Valor a Pagar R$</td><td class="right bold">{{ valor_total_formatado }}</td></tr>
+        <tr class="destaque"><td>Valor a Pagar R$</td><td class="right">{{ valor_total_formatado }}</td></tr>
     </table>
-    <p class="sep">{{ "-" * 46 }}</p>
+    <hr>
 
     <table>
-        <tr><th>FORMA PAGAMENTO</th><th class="right">VALOR PAGO R$</th></tr>
-        <tr><td>{{ forma_pagamento_label }}</td><td class="right">{{ valor_pago_formatado }}</td></tr>
-        <tr><td>Troco R$</td><td class="right">{{ troco_formatado }}</td></tr>
+        <tr><td class="rotulo upper">Forma pagamento</td><td class="rotulo upper right">Valor pago R$</td></tr>
+        <tr class="totais"><td>{{ forma_pagamento_label }}</td><td class="right">{{ valor_pago_formatado }}</td></tr>
+        <tr class="totais"><td>Troco R$</td><td class="right">{{ troco_formatado }}</td></tr>
     </table>
-    <p class="sep">{{ "-" * 46 }}</p>
+    <hr>
 
-    <p class="center small bold">Consulte pela Chave de Acesso em:</p>
-    <p class="center small">{{ url_consulta }}</p>
-    <p class="center small">{{ chave_formatada }}</p>
-    <p class="sep">{{ "-" * 46 }}</p>
+    <p class="center muted bold upper">Consulte pela Chave de Acesso em:</p>
+    <p class="center muted">{{ url_consulta }}</p>
+    <p class="center muted">{{ chave_formatada }}</p>
+    <hr>
 
-    <p class="center small">
+    <p class="center muted">
         {% if venda.cliente and not venda.cliente.consumidor_final and venda.cliente.cpf_cnpj %}
         {{ venda.cliente.nome }} — {{ venda.cliente.cpf_cnpj }}
         {% else %}
@@ -83,12 +87,15 @@
         {% endif %}
     </p>
     <p class="center small bold">NFCe n. {{ nota.numero }} Série {{ nota.serie }}{% if data_formatada %} {{ data_formatada }}{% endif %}</p>
-    {% if nota.protocolo %}<p class="center small">Protocolo de Autorização: {{ nota.protocolo }}</p>{% endif %}
-    {% if data_formatada %}<p class="center small">Data de Autorização: {{ data_formatada }}</p>{% endif %}
+    {% if nota.protocolo %}<p class="center muted">Protocolo de Autorização: {{ nota.protocolo }}</p>{% endif %}
+    {% if data_formatada %}<p class="center muted">Data de Autorização: {{ data_formatada }}</p>{% endif %}
 
-    <p class="sep">{{ "-" * 46 }}</p>
-    <div class="qrcode"><img src="{{ qrcode_imagem }}" alt="QR Code de consulta da NFC-e"></div>
+    <hr>
+    <div class="qrcode-caixa"><img src="{{ qrcode_imagem }}" alt="QR Code de consulta da NFC-e"></div>
 
-    <p class="small">{{ aviso_tributos }}</p>
+    <p class="muted">{{ aviso_tributos }}</p>
+
+    <hr>
+    <p class="corte">corte aqui</p>
 </body>
 </html>
