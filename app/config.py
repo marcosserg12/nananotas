@@ -1,5 +1,6 @@
 from urllib.parse import quote_plus
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,9 @@ class Settings(BaseSettings):
     sefaz_certificado_path: str = ""
     sefaz_certificado_senha: str = ""
     sefaz_ambiente: str = "homologacao"
+    # Série da NFC-e (cada série tem numeração própria). 1 a 889: as faixas 890-999
+    # são reservadas pela Sefaz (contingência/uso especial).
+    sefaz_serie: int = Field(default=1, ge=1, le=889)
     sefaz_csc_id: str = ""
     sefaz_csc_token: str = ""
     emitente_cnpj: str = ""

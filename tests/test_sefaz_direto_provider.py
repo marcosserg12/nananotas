@@ -29,6 +29,7 @@ def emitente_configurado(monkeypatch):
     monkeypatch.setattr(settings, "emitente_endereco_uf", "DF")
     monkeypatch.setattr(settings, "emitente_endereco_cep", "70719040")
     monkeypatch.setattr(settings, "sefaz_ambiente", "homologacao")
+    monkeypatch.setattr(settings, "sefaz_serie", 1)  # não herdar a série do .env de quem roda os testes
     monkeypatch.setattr(settings, "sefaz_csc_id", "1")
     monkeypatch.setattr(settings, "sefaz_csc_token", "ABCDEF0123456789ABCDEF0123456789")
     return settings
@@ -91,6 +92,81 @@ def test_emitir_com_autorizacao_retorna_resultado_autorizado(db_session):
     assert resultado.status == "autorizada"
     assert resultado.chave_acesso == "5" * 44
     assert resultado.protocolo == "153260000000015"
+
+
+def _emitir_autorizada(db_session, provider):
+    venda = _venda_com_item(db_session)
+    xml_capturado = {}
+
+    def _capturar_xml(xml, caminho, senha):
+        xml_capturado["xml"] = xml
+        return "<xml-assinado/>"
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", side_effect=_capturar_xml), \
+         patch("app.services.fiscal.sefaz_direto.provider.webservice_client.autorizar") as autorizar_mock:
+        autorizar_mock.return_value = {"status": "autorizado", "protocolo": "1", "chave_acesso": "5" * 44, "mensagem": "ok"}
+        resultado = provider.emitir(venda)
+    return resultado, xml_capturado["xml"]
+
+
+def test_emitir_usa_a_serie_configurada_no_env_com_numeracao_propria(db_session, monkeypatch):
+    """Sistema novo convivendo com o antigo no mesmo CNPJ: cada série tem a sua
+    numeração, então o novo usa a série 2 (começando do 1) sem colidir com os
+    números do antigo na série 1."""
+    monkeypatch.setattr(settings, "sefaz_serie", 2)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    resultado, xml = _emitir_autorizada(db_session, provider)
+
+    assert resultado.serie == "2"
+    assert resultado.numero == "1"
+    assert "<serie>2</serie>" in xml
+    assert "<nNF>1</nNF>" in xml
+
+
+def test_serie_2_nao_mexe_na_numeracao_da_serie_1(db_session, monkeypatch):
+    db_session.add(numeracao.NumeracaoNFCe(serie=1, ultimo_numero=42085))
+    db_session.commit()
+    monkeypatch.setattr(settings, "sefaz_serie", 2)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    _emitir_autorizada(db_session, provider)
+    _emitir_autorizada(db_session, provider)
+
+    contadores = {n.serie: n.ultimo_numero for n in db_session.query(numeracao.NumeracaoNFCe).all()}
+    assert contadores == {1: 42085, 2: 2}
+
+
+def test_emitir_sem_configurar_serie_continua_usando_a_serie_1(db_session):
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    resultado, xml = _emitir_autorizada(db_session, provider)
+
+    assert resultado.serie == "1"
+    assert "<serie>1</serie>" in xml
+
+
+def test_falha_apos_reserva_registra_pendencia_na_serie_configurada(db_session, monkeypatch):
+    monkeypatch.setattr(settings, "sefaz_serie", 2)
+    venda = _venda_com_item(db_session)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.assinatura.assinar_xml", side_effect=RuntimeError("falhou")):
+        resultado = provider.emitir(venda)
+
+    assert resultado.status == "rejeitada"
+    assert numeracao.numeros_reservados_nao_emitidos(db_session, serie=2) == [1]
+    assert numeracao.numeros_reservados_nao_emitidos(db_session, serie=1) == []
+
+
+@pytest.mark.parametrize("valor", ["0", "890", "999", "-1"])
+def test_serie_fora_da_faixa_permitida_e_recusada_na_configuracao(valor):
+    from pydantic import ValidationError
+
+    from app.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(sefaz_serie=valor)
 
 
 def test_emitir_com_rejeicao_retorna_resultado_rejeitado_nunca_processando(db_session):

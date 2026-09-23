@@ -70,10 +70,12 @@ class SefazDiretoProvider(FiscalProvider):
         certificado_path: str | None = None,
         certificado_senha: str | None = None,
         ambiente: str | None = None,
+        serie: int | None = None,
     ):
         self.certificado_path = certificado_path or settings.sefaz_certificado_path
         self.certificado_senha = certificado_senha or settings.sefaz_certificado_senha
         self.ambiente = ambiente or settings.sefaz_ambiente
+        self.serie = serie or settings.sefaz_serie
 
     def emitir(self, venda: Venda) -> ResultadoFiscal:
         referencia = f"nfce-venda-{venda.id}"
@@ -86,11 +88,11 @@ class SefazDiretoProvider(FiscalProvider):
         try:
             db = SessionLocal()
             try:
-                numero = reservar_proximo_numero(db, serie=1)
+                numero = reservar_proximo_numero(db, serie=self.serie)
             finally:
                 db.close()
 
-            xml_sem_assinar = xml_builder.montar_nfce_xml(venda, numero=numero, serie=1)
+            xml_sem_assinar = xml_builder.montar_nfce_xml(venda, numero=numero, serie=self.serie)
             xml_assinado = assinatura.assinar_xml(xml_sem_assinar, self.certificado_path, self.certificado_senha)
             resultado_ws = webservice_client.autorizar(xml_assinado, ambiente=self.ambiente)
         except Exception as exc:
@@ -102,7 +104,7 @@ class SefazDiretoProvider(FiscalProvider):
                 referencia=referencia,
                 status="autorizada",
                 numero=str(numero),
-                serie="1",
+                serie=str(self.serie),
                 chave_acesso=resultado_ws.get("chave_acesso"),
                 protocolo=resultado_ws.get("protocolo"),
                 # Rota do DANFE local (Task 7) -- este provedor gera o cupom
@@ -122,8 +124,7 @@ class SefazDiretoProvider(FiscalProvider):
             mensagem_erro=resultado_ws.get("mensagem") or "Falha desconhecida na emissão",
         )
 
-    @staticmethod
-    def _registrar_falha_apos_reserva_se_necessario(numero: int | None) -> None:
+    def _registrar_falha_apos_reserva_se_necessario(self, numero: int | None) -> None:
         """Marca `numero` (se um número já havia sido reservado) como
         pendente de inutilização -- ver `numeracao.registrar_falha_apos_reserva`
         e `numeracao.numeros_reservados_nao_emitidos`. Sem isso, todo número
@@ -144,7 +145,7 @@ class SefazDiretoProvider(FiscalProvider):
             return
         db = SessionLocal()
         try:
-            registrar_falha_apos_reserva(db, serie=1, numero=numero)
+            registrar_falha_apos_reserva(db, serie=self.serie, numero=numero)
         except Exception:
             pass
         finally:
