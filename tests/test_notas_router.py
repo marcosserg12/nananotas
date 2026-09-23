@@ -238,6 +238,48 @@ def test_emitir_nota_grava_dados_retornados_pelo_provedor(authed_client_com_prov
     assert "https://exemplo.com/danfe/1" in pagina.text
 
 
+def test_emitir_nota_com_sucesso_redireciona_com_flag_pra_abrir_o_cupom(authed_client_com_provider_falso, venda_paga):
+    """Pedido real: depois de gerar a nota, o cupom já deve abrir sozinho
+    numa segunda aba -- a rota sinaliza isso com `?emitido=1` (só quando
+    realmente saiu um cupom com DANFE pra abrir), e a tela usa esse sinal pra
+    disparar o `window.open` logo na carga da página."""
+    client, _ = authed_client_com_provider_falso
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/vendas/{venda_paga.id}/nota?emitido=1"
+
+    pagina = client.get(response.headers["location"])
+    assert 'window.open("https://exemplo.com/danfe/1", "_blank")' in pagina.text
+
+
+def test_ver_nota_sem_o_parametro_emitido_nao_abre_aba_sozinho(authed_client_com_provider_falso, venda_paga):
+    """Só a emissão que ACABOU de acontecer deve abrir a aba nova -- só
+    visitar a tela de uma nota já autorizada (link na lista, voltar depois)
+    não pode reabrir o cupom sozinho toda vez."""
+    client, _ = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    pagina = client.get(f"/vendas/{venda_paga.id}/nota")
+
+    assert "window.open(" not in pagina.text
+
+
+def test_emitir_nota_rejeitada_nao_manda_abrir_aba_pois_nao_tem_cupom(
+    authed_client_com_provider_falso, venda_paga
+):
+    client, _ = authed_client_com_provider_falso
+    app.dependency_overrides[get_fiscal_provider] = lambda: FiscalProviderFalsoRejeitando()
+
+    response = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/vendas/{venda_paga.id}/nota"
+    pagina = client.get(response.headers["location"])
+    assert "window.open(" not in pagina.text
+
+
 def test_emitir_nota_ja_autorizada_e_bloqueado_nao_emite_uma_segunda_nota_real(
     authed_client_com_provider_falso, venda_paga
 ):

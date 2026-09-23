@@ -76,7 +76,7 @@ def emitir(
     provider: FiscalProvider = Depends(get_fiscal_provider),
 ):
     try:
-        notas_service.emitir_nota(db, venda_id, provider)
+        nota = notas_service.emitir_nota(db, venda_id, provider)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     try:
@@ -87,7 +87,12 @@ def emitir(
         notas_service.enviar_email_nota(db, venda_id)
     except ValueError:
         pass
-    return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
+    # `?emitido=1` só quando saiu um cupom de verdade pra abrir (nota
+    # autorizada com DANFE) -- nota.html usa isso pra abrir o cupom numa
+    # segunda aba automaticamente, sem precisar clicar em "Imprimir cupom"
+    # depois. Numa rejeição não tem cupom nenhum pra abrir.
+    sufixo = "?emitido=1" if nota.url_danfe else ""
+    return RedirectResponse(url=f"/vendas/{venda_id}/nota{sufixo}", status_code=303)
 
 
 @router.post("/{venda_id}/nota/reenviar-email")

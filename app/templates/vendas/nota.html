@@ -7,6 +7,17 @@
 <p class="bg-emerald-700 text-white px-4 py-3 rounded mb-4">E-mail enviado para o cliente com sucesso.</p>
 {% endif %}
 
+{% if request.query_params.get("emitido") and nota and nota.url_danfe %}
+<script>
+    // Acabou de gerar a nota agora mesmo (redirecionou pra cá com
+    // ?emitido=1): abre o cupom já numa segunda aba, sem precisar clicar em
+    // "Imprimir cupom" depois. Só dispara logo na carga da página (dentro da
+    // mesma navegação que veio do clique em "Gerar Cupom Fiscal"), senão o
+    // navegador bloqueia como pop-up.
+    window.open("{{ nota.url_danfe }}", "_blank");
+</script>
+{% endif %}
+
 {% if parcelas %}
 <h2 class="font-semibold mb-2">Parcelas — {{ venda.forma_pagamento or "-" }}</h2>
 <div class="bg-white rounded shadow overflow-hidden mb-4 tabela-scroll">
@@ -87,6 +98,10 @@
         <button type="submit" class="bg-emerald-700 text-white px-4 py-2 rounded font-semibold">Gerar Cupom Fiscal</button>
     </form>
 </div>
+<p class="text-sm text-slate-500 mb-3">
+    Depois de gerar, o cupom já abre sozinho numa aba nova, pronto pra imprimir. Se o navegador bloquear a
+    aba, é só clicar em "Imprimir cupom" na tela seguinte.
+</p>
 
 <details class="mb-4">
     <summary class="cursor-pointer text-slate-600 underline">Já emiti essa nota por fora e só quero registrar a chave de acesso</summary>
