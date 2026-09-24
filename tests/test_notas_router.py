@@ -296,8 +296,9 @@ def test_emitir_nota_ja_autorizada_e_bloqueado_nao_emite_uma_segunda_nota_real(
 
     segunda = client.post(f"/vendas/{venda_paga.id}/nota/emitir", follow_redirects=False)
 
-    assert segunda.status_code == 400
-    assert "segunda nota fiscal real" in segunda.text
+    assert segunda.status_code == 303
+    assert "erro=" in segunda.headers["location"]
+    assert "segunda nota fiscal real" in client.get(segunda.headers["location"]).text
     assert provider_falso.emitidas == [venda_paga.id]  # não chamou o provedor de novo
 
 
@@ -370,7 +371,8 @@ def test_reenviar_email_sem_nota_autorizada_retorna_400(authed_client_com_provid
 
     response = client.post(f"/vendas/{venda_paga.id}/nota/reenviar-email", follow_redirects=False)
 
-    assert response.status_code == 400
+    assert response.status_code == 303
+    assert "erro=" in response.headers["location"]
 
 
 def test_cancelar_nota_chama_provedor_com_motivo(authed_client_com_provider_falso, venda_paga):
@@ -392,7 +394,8 @@ def test_consultar_nota_inexistente_retorna_400(authed_client_com_provider_falso
 
     response = client.post(f"/vendas/{venda_paga.id}/nota/consultar", follow_redirects=False)
 
-    assert response.status_code == 400
+    assert response.status_code == 303
+    assert "erro=" in response.headers["location"]
 
 
 def test_emitir_nota_com_venda_nao_paga_retorna_400(authed_client_com_provider_falso, venda_nao_paga):
@@ -400,7 +403,8 @@ def test_emitir_nota_com_venda_nao_paga_retorna_400(authed_client_com_provider_f
 
     response = client.post(f"/vendas/{venda_nao_paga.id}/nota/emitir", follow_redirects=False)
 
-    assert response.status_code == 400
+    assert response.status_code == 303
+    assert "erro=" in response.headers["location"]
     assert provider_falso.emitidas == []
 
 
@@ -415,7 +419,8 @@ def test_cancelar_nota_ja_cancelada_retorna_400(authed_client_com_provider_falso
         follow_redirects=False,
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 303
+    assert "erro=" in response.headers["location"]
     assert provider_falso.canceladas == [(f"venda-{venda_paga.id}", "Erro de digitação")]
 
 
@@ -431,8 +436,8 @@ def test_cancelar_nota_com_provedor_sem_suporte_retorna_erro_limpo(authed_client
         follow_redirects=False,
     )
 
-    assert response.status_code == 400
-    assert "ainda não está disponível" in response.text
+    assert response.status_code == 303
+    assert "ainda não está disponível" in client.get(response.headers["location"]).text
 
 
 def test_listar_notas_mostra_notas_emitidas_com_link_de_impressao(authed_client_com_provider_falso, venda_paga):
@@ -647,7 +652,8 @@ def test_marcar_nota_emitida_manualmente_em_venda_nao_paga_retorna_400(authed_cl
 
     response = client.post(f"/vendas/{venda_nao_paga.id}/nota/marcar-manual", follow_redirects=False)
 
-    assert response.status_code == 400
+    assert response.status_code == 303
+    assert "erro=" in response.headers["location"]
 
 
 def test_ver_danfe_com_nota_autorizada_devolve_pdf(authed_client_com_provider_falso, venda_paga):
@@ -828,3 +834,22 @@ def test_falha_transitoria_na_consulta_nao_oferece_emitir_nota_de_novo(authed_cl
     assert "Chave de acesso" in pagina.text
     assert "Atualizar status" in pagina.text
     assert "Gerar Cupom Fiscal" not in pagina.text
+
+
+def test_recusa_da_sefaz_no_cancelamento_aparece_como_aviso_na_tela_e_nao_como_json(authed_client_com_provider_falso, venda_paga):
+    client, provider_falso = authed_client_com_provider_falso
+    client.post(f"/vendas/{venda_paga.id}/nota/emitir")
+
+    def _recusa(referencia, motivo):
+        raise ValueError("A Sefaz não aceitou o cancelamento: Prazo de Cancelamento Superior ao Previsto. A nota continua válida.")
+
+    provider_falso.cancelar = _recusa
+
+    resposta = client.post(
+        f"/vendas/{venda_paga.id}/nota/cancelar", data={"motivo": "Cancelamento de teste do estabelecimento"}, follow_redirects=True
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"].startswith("text/html")
+    assert 'role="alert"' in resposta.text
+    assert "Prazo de Cancelamento Superior ao Previsto" in resposta.text

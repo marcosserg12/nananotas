@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -18,6 +19,12 @@ from app.services.fiscal.base import FiscalProvider
 
 router = APIRouter(prefix="/vendas")
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _voltar_com_erro(venda_id: int, exc: ValueError) -> RedirectResponse:
+    """Erro de regra de negócio numa ação da tela da nota: volta pra própria
+    tela com a mensagem num aviso, em vez de mostrar um JSON cru no navegador."""
+    return RedirectResponse(url=f"/vendas/{venda_id}/nota?erro={quote(str(exc)[:500])}", status_code=303)
 
 
 @router.get("/notas", response_class=HTMLResponse)
@@ -51,6 +58,8 @@ def listar_notas(
 @router.get("/{venda_id}/nota", response_class=HTMLResponse)
 def ver_nota(venda_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
     venda = db.get(Venda, venda_id)
+    if venda is None:
+        raise HTTPException(status_code=404, detail="Venda não encontrada")
     nota = db.query(NotaFiscal).filter(NotaFiscal.venda_id == venda_id).first()
     parcelas = db.query(Parcela).filter(Parcela.venda_id == venda_id).order_by(Parcela.numero).all()
     return templates.TemplateResponse(
@@ -64,6 +73,7 @@ def ver_nota(venda_id: int, request: Request, db: Session = Depends(get_db), usu
             "formas_pagamento": FORMAS_PAGAMENTO_LABELS,
             "formatar_data_hora_local": notas_service.formatar_data_hora_local,
             "formatar_quantidade": vendas_service.formatar_quantidade,
+            "erro": request.query_params.get("erro"),
         },
     )
 
@@ -78,7 +88,7 @@ def emitir(
     try:
         nota = notas_service.emitir_nota(db, venda_id, provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        return _voltar_com_erro(venda_id, exc)
     try:
         # Melhor esforço: cliente sem e-mail cadastrado, SMTP não configurado
         # ou uma falha de envio não podem derrubar a emissão, que já teve
@@ -104,7 +114,7 @@ def reenviar_email(
     try:
         notas_service.enviar_email_nota(db, venda_id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        return _voltar_com_erro(venda_id, exc)
     return RedirectResponse(url=f"/vendas/{venda_id}/nota?email_enviado=1", status_code=303)
 
 
@@ -118,7 +128,7 @@ def marcar_manual(
     try:
         notas_service.marcar_nota_emitida_manualmente(db, venda_id, chave_acesso or None)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        return _voltar_com_erro(venda_id, exc)
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
 
 
@@ -132,7 +142,7 @@ def consultar(
     try:
         notas_service.consultar_nota(db, venda_id, provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        return _voltar_com_erro(venda_id, exc)
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
 
 
@@ -162,5 +172,5 @@ def cancelar(
     try:
         notas_service.cancelar_nota(db, venda_id, motivo, provider)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        return _voltar_com_erro(venda_id, exc)
     return RedirectResponse(url=f"/vendas/{venda_id}/nota", status_code=303)
