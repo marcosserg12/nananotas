@@ -116,6 +116,26 @@ def test_gerar_pdf_danfe_reproduz_layout_da_nota_real_de_referencia(db_session):
     assert "WWW.PROCON.DF.GOV.BR" in texto
 
 
+def test_gerar_pdf_danfe_de_nota_cancelada_mostra_faixa_com_protocolo_do_cancelamento(db_session):
+    venda, nota = _venda_com_nota(db_session)
+    nota.status = StatusNota.CANCELADA
+    nota.protocolo_cancelamento = "153260000000099"
+    db_session.commit()
+
+    pdf_bytes = danfe_pdf_service.gerar_pdf_danfe(venda, nota)
+
+    texto = _texto_do_pdf(pdf_bytes)
+    assert "NFC-e CANCELADA" in texto
+    assert "153260000000099" in texto
+    assert len(PdfReader(BytesIO(pdf_bytes)).pages) == 1
+
+
+def test_gerar_pdf_danfe_de_nota_autorizada_nao_tem_faixa_de_cancelamento(db_session):
+    venda, nota = _venda_com_nota(db_session)
+
+    assert "CANCELADA" not in _texto_do_pdf(danfe_pdf_service.gerar_pdf_danfe(venda, nota))
+
+
 def test_gerar_pdf_danfe_nao_mostra_bandeira_no_texto_do_cupom(db_session):
     """A bandeira do cartão vai só para o XML fiscal (`tBand`) -- o DANFE
     real não a exibe, então o nosso também não deve."""

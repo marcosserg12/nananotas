@@ -402,6 +402,24 @@ def test_cancelar_homologado_retorna_status_cancelado():
 
 
 @respx.mock
+def test_cancelar_fora_do_prazo_com_evento_ja_registrado_155_conta_como_cancelado():
+    resposta = RESPOSTA_CANCELAMENTO_HOMOLOGADO.replace("<cStat>135</cStat>", "<cStat>155</cStat>")
+    respx.post(webservice_client.ENDPOINTS["homologacao"]["recepcao_evento"]).mock(
+        return_value=httpx.Response(200, text=resposta)
+    )
+
+    resultado = webservice_client.cancelar(
+        chave_acesso="53260900000000000000650010000000011000000015",
+        protocolo_autorizacao="153260000000015",
+        motivo="Cancelamento solicitado pelo cliente por engano na emissao",
+        xml_assinado_evento="<evento-assinado-fake/>",
+        ambiente="homologacao",
+    )
+
+    assert resultado["status"] == "cancelado"
+
+
+@respx.mock
 def test_cancelar_rejeitado_retorna_status_rejeitado_com_motivo():
     respx.post(webservice_client.ENDPOINTS["homologacao"]["recepcao_evento"]).mock(
         return_value=httpx.Response(200, text=RESPOSTA_CANCELAMENTO_REJEITADO)

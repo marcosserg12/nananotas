@@ -430,17 +430,45 @@ def test_consultar_referencia_em_formato_inesperado_retorna_rejeitada_em_vez_de_
     assert resultado.mensagem_erro
 
 
-def test_cancelar_nao_implementado_documenta_bloqueio_em_vez_de_falhar_silenciosamente(db_session):
-    """`cancelar` ainda não está implementado (ver docstring do método em
-    provider.py) -- falta um construtor de XML para o evento de
-    cancelamento (que não existe em xml_builder.py) e `assinatura.assinar_xml`
-    hoje só sabe assinar `infNFe`, não `infEvento`. Este teste documenta o
-    comportamento atual: uma exceção clara e explícita (NotImplementedError
-    com mensagem descrevendo o bloqueio), nunca um `ResultadoFiscal` com
-    status "processando" nem um cancelamento fingido como bem-sucedido."""
+MOTIVO = "Nota emitida como teste, cancelada pelo estabelecimento"
+
+
+def test_cancelar_aceito_devolve_resultado_cancelada_com_protocolo_do_evento(db_session):
     venda = _venda_com_item(db_session)
     nota = _nota_autorizada(db_session, venda)
-    provider = SefazDiretoProvider(certificado_path="x", certificado_senha="y")
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
 
-    with pytest.raises(NotImplementedError):
-        provider.cancelar(nota.referencia, motivo="Erro de digitação no item")
+    with patch("app.services.fiscal.sefaz_direto.provider.webservice_client.cancelar") as cancelar_mock:
+        cancelar_mock.return_value = {"status": "cancelado", "protocolo": "153260000000099", "mensagem": "Evento registrado"}
+        resultado = provider.cancelar(nota.referencia, MOTIVO)
+
+    assert resultado.status == "cancelada"
+    assert resultado.protocolo_cancelamento == "153260000000099"
+    assert resultado.chave_acesso == "5" * 44
+    assert resultado.protocolo == "153260000000015"
+    chave, protocolo, _motivo, envio = cancelar_mock.call_args.args
+    assert (chave, protocolo) == ("5" * 44, "153260000000015")
+    assert "<tpEvento>110111</tpEvento>" in envio and "Signature>" in envio
+
+
+def test_cancelar_rejeitado_pela_sefaz_levanta_erro_e_nao_finge_sucesso(db_session):
+    venda = _venda_com_item(db_session)
+    nota = _nota_autorizada(db_session, venda)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.webservice_client.cancelar") as cancelar_mock:
+        cancelar_mock.return_value = {"status": "rejeitado", "protocolo": None, "mensagem": "Rejeicao: prazo de cancelamento excedido"}
+        with pytest.raises(ValueError, match="prazo de cancelamento excedido"):
+            provider.cancelar(nota.referencia, MOTIVO)
+
+
+def test_cancelar_com_justificativa_curta_nem_chega_na_sefaz(db_session):
+    venda = _venda_com_item(db_session)
+    nota = _nota_autorizada(db_session, venda)
+    provider = SefazDiretoProvider(certificado_path="tests/fixtures/certificado_teste.pfx", certificado_senha="senha-teste")
+
+    with patch("app.services.fiscal.sefaz_direto.provider.webservice_client.cancelar") as cancelar_mock:
+        with pytest.raises(ValueError, match="pelo menos 15"):
+            provider.cancelar(nota.referencia, "curto")
+
+    cancelar_mock.assert_not_called()

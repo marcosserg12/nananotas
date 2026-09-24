@@ -37,6 +37,11 @@
     <p class="center small">{{ emitente_endereco_logradouro }}{% if emitente_endereco_numero %}, {{ emitente_endereco_numero }}{% endif %}{% if emitente_endereco_bairro %} - {{ emitente_endereco_bairro }}{% endif %}</p>
     <p class="center small">{{ emitente_endereco_municipio }}-{{ emitente_endereco_uf }}{% if emitente_telefone %}  Fone: {{ emitente_telefone }}{% endif %}</p>
 
+    {% if cancelada %}
+    <hr class="forte">
+    <p class="center loja-nome">*** NFC-e CANCELADA ***</p>
+    {% if protocolo_cancelamento %}<p class="center muted">Protocolo de cancelamento: {{ protocolo_cancelamento }}</p>{% endif %}
+    {% endif %}
     <hr class="forte">
     <p class="center muted">Documento Auxiliar da Nota Fiscal de Consumidor Eletronica</p>
     <p class="center muted">Não permite aproveitamento de crédito de ICMS</p>

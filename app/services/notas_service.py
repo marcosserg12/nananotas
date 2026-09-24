@@ -154,6 +154,9 @@ def cancelar_nota(db: Session, venda_id: int, motivo: str, provider: FiscalProvi
             "com a Sefaz — funcionalidade pendente."
         )
     _aplicar_resultado(nota, resultado)
+    nota.protocolo_cancelamento = resultado.protocolo_cancelamento
+    nota.cancelada_em = datetime.utcnow()
+    nota.motivo_cancelamento = motivo
     db.commit()
     db.refresh(nota)
     return nota

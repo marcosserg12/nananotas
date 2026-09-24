@@ -166,6 +166,8 @@ _CODIGOS_CSTAT_AUTORIZADO = {"100"}
 _CODIGOS_CSTAT_CANCELADO_NA_CONSULTA = {"101", "135", "151"}
 _CODIGOS_CSTAT_NAO_ENCONTRADO = {"217", "218"}
 _CODIGO_CSTAT_EVENTO_REGISTRADO = "135"
+# 155 = "Cancelamento homologado fora de prazo" -- a Sefaz aceitou e o cancelamento vale.
+_CODIGOS_CSTAT_CANCELAMENTO_ACEITO = {"135", "155"}
 _CODIGO_CSTAT_INUTILIZADO = "102"
 
 # cStat de LOTE (não de nota individual): "103" (lote recebido com sucesso,
@@ -462,7 +464,7 @@ def cancelar(
     cstat = _texto(origem, "cStat")
     mensagem = _texto(origem, "xMotivo") or ""
 
-    if cstat == _CODIGO_CSTAT_EVENTO_REGISTRADO:
+    if cstat in _CODIGOS_CSTAT_CANCELAMENTO_ACEITO:
         return {
             "status": "cancelado",
             "protocolo": _texto(origem, "nProt"),

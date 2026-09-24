@@ -134,3 +134,51 @@ def test_enviar_email_nota_propaga_erro_do_servico_de_email(db_session, monkeypa
 
     db_session.refresh(nota)
     assert nota.email_enviado_em is None
+
+
+class _ProviderCancelaOk:
+    def cancelar(self, referencia, motivo):
+        from app.services.fiscal.base import ResultadoFiscal
+        return ResultadoFiscal(referencia=referencia, status="cancelada", protocolo_cancelamento="153260000000099")
+
+
+class _ProviderCancelaRecusado:
+    def cancelar(self, referencia, motivo):
+        raise ValueError("A Sefaz não aceitou o cancelamento: prazo excedido. A nota continua válida.")
+
+
+def _venda_com_nota_autorizada(db_session):
+    cliente = clientes_service.criar_cliente(db_session, tipo_pessoa=TipoPessoa.PF, nome="Cancela", email=None)
+    venda = vendas_service.criar_venda(db_session, cliente.id)
+    nota = NotaFiscal(
+        venda_id=venda.id, provedor="sefaz_direto", referencia="v1", status=StatusNota.AUTORIZADA,
+        chave_acesso="3" * 44, protocolo="153260000000015", numero="1", serie="2",
+    )
+    db_session.add(nota)
+    db_session.commit()
+    return venda, nota
+
+
+def test_cancelar_nota_guarda_comprovante_e_mantem_chave_e_protocolo_originais(db_session):
+    venda, _ = _venda_com_nota_autorizada(db_session)
+
+    nota = notas_service.cancelar_nota(db_session, venda.id, "Teste cancelado pelo estabelecimento", _ProviderCancelaOk())
+
+    assert nota.status == StatusNota.CANCELADA
+    assert nota.protocolo_cancelamento == "153260000000099"
+    assert nota.motivo_cancelamento == "Teste cancelado pelo estabelecimento"
+    assert nota.cancelada_em is not None
+    assert nota.chave_acesso == "3" * 44
+    assert nota.protocolo == "153260000000015"
+
+
+def test_cancelar_nota_recusada_pela_sefaz_deixa_a_nota_autorizada_e_sem_comprovante(db_session):
+    venda, _ = _venda_com_nota_autorizada(db_session)
+
+    with pytest.raises(ValueError, match="prazo excedido"):
+        notas_service.cancelar_nota(db_session, venda.id, "Teste cancelado pelo estabelecimento", _ProviderCancelaRecusado())
+
+    nota = db_session.query(NotaFiscal).filter_by(venda_id=venda.id).one()
+    assert nota.status == StatusNota.AUTORIZADA
+    assert nota.protocolo_cancelamento is None
+    assert nota.cancelada_em is None

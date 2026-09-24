@@ -3,7 +3,7 @@ from app.database import SessionLocal
 from app.models.nota_fiscal import NotaFiscal
 from app.models.venda import Venda
 from app.services.fiscal.base import FiscalProvider, ResultadoFiscal
-from app.services.fiscal.sefaz_direto import assinatura, webservice_client, xml_builder
+from app.services.fiscal.sefaz_direto import assinatura, evento_cancelamento, webservice_client, xml_builder
 from app.services.fiscal.sefaz_direto.numeracao import registrar_falha_apos_reserva, reservar_proximo_numero
 
 _PREFIXO_REFERENCIA = "nfce-venda-"
@@ -178,55 +178,44 @@ class SefazDiretoProvider(FiscalProvider):
         )
 
     def cancelar(self, referencia: str, motivo: str) -> ResultadoFiscal:
-        """NÃO IMPLEMENTADO -- bloqueio concreto identificado nesta task, não
-        uma pendência mecânica de "wiring".
+        """Cancela a NFC-e na Sefaz (evento 110111): monta o evento, assina com
+        o certificado A1 e envia. Só devolve `ResultadoFiscal` quando a Sefaz
+        ACEITOU o cancelamento; qualquer outra coisa (justificativa curta demais,
+        prazo vencido, erro de rede, rejeição) levanta `ValueError` com o motivo
+        -- de propósito, pra o chamador NÃO gravar nada: a nota continua
+        "autorizada" no sistema, porque na Sefaz ela continua valendo."""
+        nota = _buscar_nota_por_referencia(referencia)
+        try:
+            evento = evento_cancelamento.montar_evento(
+                chave_acesso=nota.chave_acesso,
+                protocolo=nota.protocolo,
+                justificativa=motivo,
+                ambiente=self.ambiente,
+            )
+            evento_assinado = assinatura.assinar_xml(
+                evento, self.certificado_path, self.certificado_senha, nome_elemento="infEvento"
+            )
+            envio = evento_cancelamento.montar_envio(evento_assinado, webservice_client._gerar_id_lote())
+            resultado_ws = webservice_client.cancelar(
+                nota.chave_acesso, nota.protocolo, motivo, envio, ambiente=self.ambiente
+            )
+        except ValueError:
+            raise
+        except Exception as exc:  # noqa: BLE001 -- nunca deixar erro cru vazar pra tela
+            raise ValueError(f"Falha ao cancelar a nota: {exc}") from exc
 
-        `webservice_client.cancelar` (Task 5) já funciona e só precisa de
-        `chave_acesso`/`protocolo_autorizacao` (resolvidos via
-        `_buscar_nota_por_referencia`, igual a `consultar` acima) e de
-        `xml_assinado_evento`: o XML do evento de cancelamento (schema do
-        evento nacional NFe/NFC-e, `tpEvento=110111`), assinado.
-
-        Esse XML não pode ser montado nem assinado hoje com o que existe no
-        projeto:
-
-        1. `xml_builder.py` (Task 3) só monta o XML da própria NFC-e
-           (`infNFe`) -- não existe nenhuma função para montar o XML do
-           *evento* de cancelamento (`infEvento`/`detEvento`).
-        2. A `nfelib` instalada neste ambiente (verificado nesta task via
-           `dataclasses.fields`) expõe `Tevento`/`Tevento.InfEvento`, mas
-           `Tevento.InfEvento.DetEvento` é um grupo `xs:any` sem tipagem
-           (campos `any_element`/`any_attributes`) -- ou seja, ao contrário
-           do XML da NFC-e (Task 3, com classes tipadas para cada grupo), o
-           conteúdo específico do cancelamento (`evCancNFe` com
-           `descEvento`/`nProt`/`xJust`) precisaria ser montado manualmente
-           como XML bruto (lxml), sem o mesmo grau de confiança que a Task 3
-           teve para o XML da NFC-e (round-trip contra amostra oficial da
-           própria `nfelib`). Também não há, neste módulo do pacote, uma
-           classe de envelope pronta (`envEvento`) análoga a `Nfe` para a
-           NFC-e.
-        3. `assinatura.assinar_xml` (Task 4) tem `_localizar_inf_nfe`
-           **fixo** em procurar a tag `{http://www.portalfiscal.inf.br/nfe}infNFe`
-           -- não localiza `infEvento`. Reusá-la como está para assinar um
-           evento falha (ou assina o elemento errado, silenciosamente, se o
-           documento contiver por acaso uma tag `infNFe`). Assinar o evento
-           corretamente exigiria generalizar essa função para aceitar o nome
-           do elemento/atributo `Id` a referenciar -- uma mudança na Task 4,
-           fora do escopo de "wiring" desta task.
-
-        Implementar isso direito é, na prática, uma miniatura das Tasks 3+4
-        para um documento diferente (evento, não NFe), com o mesmo rigor que
-        elas tiveram (validação de schema, verificação criptográfica
-        independente da assinatura) -- não algo que deveria ser
-        "encaixado" às pressas aqui só para não deixar `NotImplementedError`.
-        Por isso esta task entrega `consultar` funcional de verdade (não
-        precisa de XML novo, só de `chave_acesso`, já resolvida acima) e
-        deixa `cancelar` como stub explícito, documentado, para uma task de
-        acompanhamento -- ver relatório desta task.
-        """
-        raise NotImplementedError(
-            "SefazDiretoProvider.cancelar ainda não está implementado: falta um "
-            "construtor de XML para o evento de cancelamento (tpEvento=110111) e "
-            "assinatura.assinar_xml não suporta assinar infEvento (só infNFe). "
-            "Ver docstring deste método para os detalhes do bloqueio."
+        if resultado_ws["status"] != "cancelado":
+            raise ValueError(
+                "A Sefaz não aceitou o cancelamento: "
+                f"{resultado_ws.get('mensagem') or 'sem motivo informado'}. A nota continua válida."
+            )
+        return ResultadoFiscal(
+            referencia=referencia,
+            status="cancelada",
+            numero=nota.numero,
+            serie=nota.serie,
+            chave_acesso=nota.chave_acesso,
+            protocolo=nota.protocolo,
+            url_danfe=nota.url_danfe,
+            protocolo_cancelamento=resultado_ws.get("protocolo"),
         )

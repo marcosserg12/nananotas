@@ -157,13 +157,26 @@
         <button type="submit" class="bg-slate-700 text-white px-4 py-2 rounded">{{ "Reenviar e-mail" if nota.email_enviado_em else "Enviar por e-mail" }}</button>
     </form>
     {% endif %}
-    {% if nota.status.value == "autorizada" %}
-    <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" data-confirm-mensagem="Cancelar esta nota fiscal? Essa ação avisa a Sefaz e não pode ser desfeita.">
-        <input type="hidden" name="motivo" value="Cancelamento solicitado pelo estabelecimento">
+</div>
+
+{% if nota.status.value == "autorizada" %}
+<details class="mt-4">
+    <summary class="cursor-pointer text-red-700 underline">Cancelar esta nota fiscal</summary>
+    <form method="post" action="/vendas/{{ venda.id }}/nota/cancelar" class="mt-2 max-w-xl space-y-2"
+          data-confirm-mensagem="Cancelar esta nota fiscal? Isso avisa a Sefaz e não pode ser desfeito. Só funciona dentro do prazo que a Sefaz permite.">
+        <label for="motivo_cancelamento" class="block text-sm font-medium">Motivo do cancelamento (mínimo 15 letras)</label>
+        <input type="text" id="motivo_cancelamento" name="motivo" required minlength="15" maxlength="255"
+               value="Cancelamento solicitado pelo estabelecimento" class="w-full border rounded px-3 py-2">
         <button type="submit" class="bg-red-700 text-white px-4 py-2 rounded">Cancelar nota</button>
     </form>
-    {% endif %}
+</details>
+{% elif nota.status.value == "cancelada" %}
+<div class="mt-4 border rounded p-3 text-sm border-red-300 bg-red-50 text-brand-900 space-y-1">
+    <p class="font-bold">Nota cancelada na Sefaz{% if nota.cancelada_em %} em {{ formatar_data_hora_local(nota.cancelada_em) }}{% endif %}.</p>
+    {% if nota.protocolo_cancelamento %}<p>Protocolo do cancelamento: {{ nota.protocolo_cancelamento }}</p>{% endif %}
+    {% if nota.motivo_cancelamento %}<p>Motivo: {{ nota.motivo_cancelamento }}</p>{% endif %}
 </div>
+{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}

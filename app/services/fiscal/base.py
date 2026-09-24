@@ -15,6 +15,7 @@ class ResultadoFiscal:
     url_danfe: str | None = None
     url_xml: str | None = None
     mensagem_erro: str | None = None
+    protocolo_cancelamento: str | None = None
 
 
 class FiscalProvider(ABC):

@@ -22,7 +22,7 @@ from xhtml2pdf import pisa
 
 from app.config import settings
 from app.constants import FORMAS_PAGAMENTO_LABELS
-from app.models.nota_fiscal import NotaFiscal
+from app.models.nota_fiscal import NotaFiscal, StatusNota
 from app.models.venda import Venda
 from app.services.fiscal.sefaz_direto import qrcode_builder
 from app.services.fiscal.sefaz_direto.xml_builder import FUSO_BRASILIA
@@ -63,6 +63,7 @@ _ALTURA_ESQUELETO_MM = 192.0  # tudo que não depende de item nenhum, assumindo 
 _ALTURA_POR_ITEM_MM = 11.5  # por item: 1 linha do nome + 1 linha de qtde/valor
 _ALTURA_LINHA_EXTRA_MM = 6.0  # cada linha ALÉM da primeira, em qualquer texto de tamanho variável
 _MARGEM_SEGURANCA_MM = 8.0
+_ALTURA_FAIXA_CANCELADA_MM = 14.0  # faixa "NFC-e CANCELADA" + protocolo do cancelamento
 
 # Texto fixo do aviso da Lei 12.741/2012, reproduzido caractere por caractere
 # (incluindo a grafia sem acentos e sem a barra em "12.741/2012") a partir de
@@ -140,6 +141,7 @@ def _calcular_altura_pagina_mm(
     municipio_fone_linha: str,
     cliente_linha: str,
     itens: list[dict],
+    cancelada: bool = False,
 ) -> float:
     linhas_extras_texto = (
         _linhas_extras(razao_social, _LARGURA_CONTEUDO_MM, "Courier-Bold", 11)
@@ -157,6 +159,7 @@ def _calcular_altura_pagina_mm(
         _ALTURA_ESQUELETO_MM
         + _ALTURA_POR_ITEM_MM * len(itens)
         + _ALTURA_LINHA_EXTRA_MM * (linhas_extras_texto + linhas_extras_itens)
+        + (_ALTURA_FAIXA_CANCELADA_MM if cancelada else 0)
         + _MARGEM_SEGURANCA_MM
     )
 
@@ -211,6 +214,7 @@ def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
     else:
         cliente_linha = "CONSUMIDOR NÃO IDENTIFICADO"
 
+    cancelada = nota.status == StatusNota.CANCELADA
     altura_pagina_mm = _calcular_altura_pagina_mm(
         razao_social=settings.emitente_razao_social,
         cnpj_ie_linha=cnpj_ie_linha,
@@ -218,6 +222,7 @@ def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
         municipio_fone_linha=municipio_fone_linha,
         cliente_linha=cliente_linha,
         itens=itens,
+        cancelada=cancelada,
     )
 
     html = template.render(
@@ -245,6 +250,8 @@ def gerar_pdf_danfe(venda: Venda, nota: NotaFiscal) -> bytes:
         aviso_tributos=_AVISO_TRIBUTOS,
         largura_pagina_mm=_LARGURA_PAGINA_MM,
         altura_pagina_mm=altura_pagina_mm,
+        cancelada=cancelada,
+        protocolo_cancelamento=nota.protocolo_cancelamento,
     )
 
     buffer = BytesIO()

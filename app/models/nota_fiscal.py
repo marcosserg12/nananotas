@@ -38,5 +38,11 @@ class NotaFiscal(Base):
     # cliente -- sobrescrito a cada reenvio (ao contrário de `autorizado_em`),
     # porque aqui o que importa é "quando foi a última vez", não "a primeira".
     email_enviado_em = Column(DateTime, nullable=True)
+    # Comprovante do cancelamento na Sefaz (evento 110111): protocolo do
+    # EVENTO (diferente do `protocolo` de autorização da nota, que continua
+    # guardado), momento (UTC) e a justificativa enviada.
+    protocolo_cancelamento = Column(String(30), nullable=True)
+    cancelada_em = Column(DateTime, nullable=True)
+    motivo_cancelamento = Column(Text, nullable=True)
 
     venda = relationship("Venda")
