@@ -1,5 +1,17 @@
 # Nana Lanches — Sistema de Vendas e Nota Fiscal
 
+Sistema de vendas para uma lanchonete em Brasília: venda no balcão (inclusive por um tablet na rede local), cadastro de produtos e clientes, painel com indicadores e **emissão de NFC-e direto na Sefaz-DF**, sem provedor terceirizado.
+
+## Destaques
+
+- **Emissão direta de NFC-e:** o XML é montado com `nfelib`, assinado com o certificado A1 (`.pfx`) e enviado para a SVRS. O sistema também gera o QR Code com o CSC e a DANFE-NFC-e em PDF.
+- **Cancelamento na Sefaz:** evento 110111 montado, assinado e enviado pelo próprio sistema. A nota só é marcada como cancelada quando a Sefaz aceita.
+- **Provedores fiscais intercambiáveis:** `app/services/fiscal/base.py` define a interface `FiscalProvider` (emitir, consultar, cancelar). A integração com a Focus NFe e a emissão direta (`sefaz_direto/`) são duas implementações dela.
+- **Falha não perde venda:** nota rejeitada vai para a lista de "vendas pendentes de nota fiscal", para nova tentativa.
+- **430 testes automatizados** (pytest + respx), com SQLite em memória e um certificado autoassinado de teste. Rodam sem banco real e sem Sefaz.
+
+**Stack:** Python 3.12 · FastAPI · SQLAlchemy 2 + Alembic · MySQL · Jinja2 · nfelib · signxml · xhtml2pdf
+
 ## Requisitos
 - Python 3.12+
 - Acesso ao servidor MySQL (host `SEU_SERVIDOR_MYSQL`, porta `3306`)
@@ -98,27 +110,6 @@ de "vendas pendentes de nota fiscal" do painel — não existe modo de
 contingência automático (decisão consciente, ver
 `docs/superpowers/specs/2026-09-16-emissao-direta-sefaz-df-design.md`), então
 alguém precisa acompanhar essa lista e tentar de novo manualmente.
-
-### Limitações conhecidas desta integração
-
-- **Cancelamento de nota autorizada ainda não funciona.**
-  `SefazDiretoProvider.cancelar` (`app/services/fiscal/sefaz_direto/provider.py`)
-  lança `NotImplementedError` de propósito — construir o cancelamento exige
-  um construtor de XML novo para o evento `infEvento`/`tpEvento=110111`, que
-  ainda não existe neste projeto. A rota `/vendas/{id}/nota/cancelar`
-  detecta isso e devolve um erro 400 com mensagem clara ("Cancelamento de
-  nota ainda não está disponível na integração direta com a Sefaz —
-  funcionalidade pendente.") em vez de quebrar. Enquanto isso não for
-  implementado, a única alternativa é o recurso já existente de "marcar nota
-  como emitida manualmente" (`/vendas/{id}/nota/marcar-manual`) — ele serve
-  para *registrar* a situação no sistema, mas **não cancela a nota na
-  Sefaz de fato**; qualquer cancelamento real precisa ser resolvido fora do
-  sistema (ex.: diretamente no ambiente da Sefaz-DF ou com o contador) até
-  essa funcionalidade ser implementada.
-- **A página da DANFE-NFC-e (`/vendas/{id}/nota/danfe`) não tem link em
-  nenhuma outra tela do sistema ainda.** Para visualizá-la ou imprimi-la é
-  preciso digitar a URL diretamente no navegador, substituindo `{id}` pelo
-  id da venda.
 
 ## Rodando os testes
 
